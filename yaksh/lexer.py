@@ -24,11 +24,7 @@ DELIMITERS = {
     ':': 'BLOCK_BEGIN',
 }
 
-NUMBER_TYPES = {
-    'b': 'BINARY',
-    'x': 'HEX',
-    'h': 'HEX',
-}
+NUMBER_TYPES = {'b', 'x', 'h'}
 
 
 class Token(object):
@@ -116,7 +112,7 @@ def lex(s):
         if c.isalpha():
             if (_type_is('INTEGER') and _len(1) and _peek_behind(1) == '0' and
                     _peek(1).isdigit() and c in NUMBER_TYPES):
-                _change_type(NUMBER_TYPES[c])
+                _token('NUMBER')
             else:
                 _token('IDENTIFIER')
         elif c.isdigit():
@@ -124,10 +120,10 @@ def lex(s):
                 # Allow numbers in identifiers after first digit
                 _token('IDENTIFIER')
             else:
-                _token('INTEGER')
+                _token('NUMBER')
         elif c == '.':
-            if _type_is('INTEGER') and _peek(1).isdigit():
-                _change_type('REAL')
+            if _type_is('NUMBER') and _peek(1).isdigit():
+                _token('NUMBER')
             else:
                 _single('DOT')
         elif c == '_':
@@ -189,6 +185,8 @@ def tokenize(lex_tokens):
         if t.type == 'IDENTIFIER':
             if t.text in T_RESERVED:
                 t.type = 'RESERVED'
+            else:
+                t.type = 'NAME'
 
         # Capture the token
         if t is not None:
