@@ -20,7 +20,6 @@ DELIMITERS = {
     ',': 'COMMA',
     '"': 'DOUBLE_QUOTE',
     "'": 'SINGLE_QUOTE',
-    '\n': 'END_STATEMENT',
     ';': 'END_STATEMENT',
     ':': 'BLOCK_BEGIN',
 }
@@ -32,11 +31,26 @@ NUMBER_TYPES = {
 }
 
 
+class Token(object):
+    def __init__(self, type, text, line_no, char_no):
+        self.type = type
+        self.text = text
+        self.line_no = line_no
+        self.char_no = char_no
+
+    def __str__(self):
+        return 'Token.%s(%r):%d:%d' % (self.type, self.text,
+                                       self.line_no, self.char_no)
+    __repr__ = __str__
+
+
 def lex(s):
     tokens = []
     curtype = []
     chars = []
     cur = [0]
+    line_no = 0
+    char_no = 0
 
     def _cur(assn=None):
         if assn is None:
@@ -60,8 +74,11 @@ def lex(s):
         else:
             return len(chars) == cmp
 
-    def _is_type(type):
+    def _type_is(type):
         return curtype and curtype[0] == type
+
+    def _last_token_is(type, c=None):
+        return tokens and tokens[-1].type == type and (c is None or c == tokens[-1].text)
 
     def _suppress():
         curtype[:] = []
@@ -72,7 +89,8 @@ def lex(s):
     def _end_token():
         if curtype:
             assert len(curtype) == 1
-            tokens.append((curtype[0], ''.join(chars)))
+            t = Token(curtype[0], ''.join(chars), line_no, char_no - len(chars))
+            tokens.append(t)
             curtype[:] = []
         chars[:] = []
 
@@ -83,6 +101,8 @@ def lex(s):
         _skip(skip)
 
     def _token(type):
+        if type != 'INDENT' and _type_is('INDENT'):
+            _end_token()
         if not curtype:
             curtype.append(type)
         chars.append(c)
@@ -94,22 +114,24 @@ def lex(s):
     while _cur() < len(s):
         c = s[_cur()]
         if c.isalpha():
-            if (_is_type('INTEGER') and _len(1) and _peek_behind(1) == '0' and
+            if (_type_is('INTEGER') and _len(1) and _peek_behind(1) == '0' and
                     _peek(1).isdigit() and c in NUMBER_TYPES):
                 _change_type(NUMBER_TYPES[c])
             else:
                 _token('IDENTIFIER')
         elif c.isdigit():
-            if _is_type('IDENTIFIER'):
+            if _type_is('IDENTIFIER'):
                 # Allow numbers in identifiers after first digit
                 _token('IDENTIFIER')
             else:
                 _token('INTEGER')
         elif c == '.':
-            if _is_type('INTEGER') and _peek(1).isdigit():
+            if _type_is('INTEGER') and _peek(1).isdigit():
                 _change_type('REAL')
             else:
                 _single('DOT')
+        elif c == '_':
+            _token('IDENTIFIER')
         elif _peek(1) == '=':
             if c in OPERATORS:
                 _single(OPERATORS[c] + '_ASSIGN', 1)
@@ -121,21 +143,67 @@ def lex(s):
             _single(OPERATORS[c])
         elif c in DELIMITERS:
             _single(DELIMITERS[c])
-        elif c in ' ':
-            _end_token()
-            _suppress()
+        elif c == '\n':
+            if tokens:
+                _single('NEWLINE')
+            else:
+                # Eat whitespace at beginning of file
+                _suppress()
+            line_no += 1
+            char_no = -1
+        elif c in ' \t':
+            if _last_token_is('NEWLINE') or _type_is('INDENT'):
+                _token('INDENT')
+            else:
+                _end_token()
+                _suppress()
         else:
             _single('UNKNOWN')
+
         _skip(1)
+        char_no += 1
 
     _end_token()
     return tokens
 
 
+T_RESERVED = (
+    'def',
+    'return',
+    'if',
+    'elif',
+    'else',
+    'for',
+    'in',
+    'is',
+)
+
+
+def tokenize(lex_tokens):
+    """Lexer pass 2. Does a little more categorization."""
+    tokens = []
+    cur = 0
+
+    while cur < len(lex_tokens):
+        t = lex_tokens[cur]
+        if t.type == 'IDENTIFIER':
+            if t.text in T_RESERVED:
+                t.type = 'RESERVED'
+
+        # Capture the token
+        if t is not None:
+            tokens.append(t)
+        cur += 1
+
+    return tokens
+
+
 if __name__ == '__main__':
-    print lex('''\
+    from pprint import pprint
+    pprint(tokenize(lex('''
 def toebag(x, n, *rest):
-    result = n * x + 42 - 0x8 + 0.986
+    result = n * x
     return result
-end\
-''')
+
+print(toebag(1, 2, 3))
+''')))
