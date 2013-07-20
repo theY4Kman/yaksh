@@ -128,11 +128,14 @@ def lex(s):
                 _single('DOT')
         elif c == '_':
             _token('IDENTIFIER')
-        elif _peek(1) == '=':
-            if c in OPERATORS:
-                _single(OPERATORS[c] + '_ASSIGN', 1)
-            elif c in COMPARISONS:
-                _single(COMPARISONS[c], 1)
+        elif c == '=':
+            if _peek(1) == '=':
+                if c in OPERATORS:
+                    _single(OPERATORS[c] + '_ASSIGN', 1)
+                elif c in COMPARISONS:
+                    _single(COMPARISONS[c], 1)
+                else:
+                    _single('UNKNOWN')
             else:
                 _single('ASSIGN')
         elif c in OPERATORS:
@@ -183,10 +186,13 @@ def tokenize(lex_tokens):
     while cur < len(lex_tokens):
         t = lex_tokens[cur]
         if t.type == 'IDENTIFIER':
+            t.text = t.text.strip()
             if t.text in T_RESERVED:
-                t.type = 'RESERVED'
+                t.type = 'R_' + t.text.upper()
             else:
                 t.type = 'NAME'
+        elif t.type == 'INTEGER':
+            t.type = 'NUMBER'
 
         # Capture the token
         if t is not None:

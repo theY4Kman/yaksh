@@ -25,6 +25,9 @@ Assumptions I've made and thought were notable while writing the grammar:
    obvious enough to hide in the lexer -- I say all this because it's opposed to
    single-quoted items, which are obvious enough as just characters, like ')')
 
+Well, after all that planning and research, I _was_ able to jump in and write
+something that does some kind of parsing :P
+
 
 
 script: (NEWLINE | stmt)*
@@ -42,34 +45,20 @@ paramdef: (NAME ',') | NAME
 
 fcall_stmt: NAME arguments
 arguments: '(' + argdef* ')'
-argdef: (value_stmt ',') | value_stmt
+argdef: value_stmt
 
 atom: NAME | NUMBER | STRING
 """
-import functools
+from yaksh.lexer import OPERATORS
 
 
-class Statement(object):
+class Symbol(object):
+    def __init__(self, name, children):
+        self.name = name
+        self.symbols = children
+
     def __repr__(self):
-        return str(self)
-
-
-class Block(list):
-    """A collection of statements at the same level of indentation"""
-
-
-class Function(object):
-    """A label with an arguments list and one statement/block"""
-
-
-class FunctionDefinition(Statement):
-    def __init__(self, funcname, args):
-        self.funcname = funcname
-        self.args = args
-
-    def __str__(self):
-        return 'def %s(%s):' % (self.funcname.text,
-                                ', '.join(t.text for t in self.args))
+        return '<Symbol %s, %d children>' % (self.name, len(self.symbols))
 
 
 LITERAL_TOKENS = (
@@ -81,171 +70,210 @@ LITERAL_TOKENS = (
 )
 
 
-def parse(tokens):
+symbols = None
+symbol_tokens = []
+cur_sym = None
+cur_idx = None
+cur = None
+_tokens = []
+
+
+def _next():
+    global cur_idx, cur
+    cur_idx += 1
+    if cur_idx < len(_tokens):
+        cur = _tokens[cur_idx]
+    else:
+        cur = None
+
+
+def _getsym():
+    symbol_tokens.append(cur)
+    _next()
+
+
+def _accept(token_type, capture=True):
+    if cur.type == token_type:
+        if capture:
+            _getsym()
+        else:
+            _next()
+        return True
+    else:
+        return False
+
+
+def _expect(token_type, capture=True):
+    if _accept(token_type, capture):
+        return True
+    else:
+        raise ValueError('Expected %s, found %r' % (token_type, cur))
+
+
+def _term(token_type):
+    return _expect(token_type, False)
+
+
+def _sym(name, symbols=None):
+    return Symbol(name, symbols or symbol_tokens)
+
+
+def _endsym(name):
+    global symbol_tokens
+    symbol = _sym(name)
+    symbol_tokens = []
+    return symbol
+
+
+def _eat_newlines():
+    while _accept('NEWLINE', False):
+        if not cur:
+            break
+
+
+def name():
+    if _accept('NAME'):
+        return _endsym('name')
+
+
+def operator():
+    if cur.type in OPERATORS.values():
+        _getsym()
+        return _endsym('operator')
+
+
+def value():
+    if _accept('NAME') or _accept('NUMBER'):
+        return _endsym('value')
+
+
+def value_stmt():
+    symbols = []
+    v = value()
+    if not v:
+        raise ValueError('Expected a value')
+    symbols.append(v)
+    while True:
+        op = operator()
+        if op:
+            v = value()
+            if not v:
+                raise ValueError('Expected a value')
+            symbols.append(op)
+            symbols.append(v)
+        else:
+            break
+    return Symbol('value_stmt', symbols)
+
+
+
+def arglist():
+    args = []
+    while True:
+        v = value_stmt()
+        if v:
+            args.append(v)
+        else:
+            break
+        if not _accept('COMMA', False):
+            break
+    return Symbol('arglist', args)
+
+
+def reserved_stmt():
+    if _accept('R_RETURN', False):
+        r = _endsym('return_stmt')
+        return_value = value_stmt()
+        if return_value:
+            r.symbols = (r,)
+        return r
+
+
+def stmt():
+    _eat_newlines()
+    if _accept('NAME'):
+        if _accept('ASSIGN'):
+            assign = _endsym('assign')
+            value = value_stmt()
+            if not value:
+                raise ValueError('Expected a value statement')
+            assign.symbols.append(value)
+            return assign
+        elif _accept('OPEN_PAREN', False):
+            fcall = _endsym('fcall')
+            args = arglist()
+            _term('CLOSE_PAREN')
+            fcall.symbols.append(args)
+            return fcall
+        elif _accept('NEWLINE'):
+            return _endsym('name')
+        else:
+            raise ValueError('Not a valid statement')
+    else:
+        return reserved_stmt()
+
+
+def block():
     statements = []
-    cur = [0]
+    while True:
+        _eat_newlines()
+        if not _accept('INDENT'):
+            break
+        indent = _endsym('indent')
+        if _accept('NEWLINE'):
+            continue
 
-    def _cur(assn=None):
-        if assn is None:
-            return cur[0]
+        s = stmt()
+        if s:
+            statements.append((indent, s))
         else:
-            cur[0] = assn
+            break
+    return Symbol('block', statements)
 
-    def _skip(offset=1):
-        _cur(_cur() + offset)
-        return _token()
 
-    def _token(index=None):
-        if index is None:
-            index = _cur()
-        if index >= len(tokens):
-            return None
-        return tokens[index]
+def parse(tokens):
+    if not tokens:
+        return []
 
-    def _next():
-        _skip()
-        return _token()
+    global symbols, cur_idx, cur_sym, _tokens, cur
+    _tokens = tokens
 
-    def _peek(offset=1):
-        return _token(_cur() + offset)
+    symbols = []
+    cur_idx = 0
+    cur = _tokens[cur_idx]
+    num_tokens = len(_tokens)
 
-    def _eat(*types):
-        t = _next()
-        if t.type in types:
-            return t
+    while cur_idx < num_tokens:
+        _eat_newlines()
+        if cur is None:
+            # End of input
+            break
+        if _accept('R_DEF', False):
+            func = _sym('fdef')
+
+            _expect('NAME')
+            funcname = _endsym('name')
+
+            _term('OPEN_PAREN')
+
+            while _accept('NAME'):
+                if not _accept('COMMA', False):
+                    break
+            parameters = _endsym('parameters')
+
+            _term('CLOSE_PAREN')
+            _term('BLOCK_BEGIN')
+            _term('NEWLINE')
+
+            func.symbols = (funcname, parameters, block())
+            symbols.append(func)
         else:
-            raise SyntaxError('Unexpected %s. Was expecting token %s.' %
-                              (t, types))
-
-    def _eat_until(delims=None, *types):
-        """Expects a token of type in *types, and advances the cursor if so.
-        Completes successfully when one of delims is found. Otherwise, gives a
-        syntax error."""
-        if isinstance(delims, str):
-            delims = (delims,)
-        elif delims is None:
-            delims = ('NEWLINE',)
-        def _error(message):
-            raise SyntaxError('%s. Was expecting a delimiter %s or token %s' %
-                              (message, delims, types))
-        while _cur() < len(tokens):
-            t = tokens[_cur()]
-            if t.type in delims:
-                return
-            elif t.type in types:
-                yield t
+            s = stmt()
+            if s:
+                symbols.append(s)
             else:
-                _error('Unexpected %s' % t)
-            _skip()
-        else:
-            _error('Unexpected end of input')
+                print 'Skipping %r' % cur
+                _next()
 
-    def _expect(*types):
-        """Expect one of *types, eat if correct, error if not"""
-        next_token = _peek()
-        if next_token is None:
-            raise SyntaxError('Unexpected end of input.')
-        for type in types:
-            if callable(type):
-                try:
-                    val = type()
-                except SyntaxError:
-                    pass
-                else:
-                    if val is not None:
-                        return val
-            else:
-                if next_token.type == type:
-                    _skip()
-                    return next_token
-        else:
-            type_names = []
-            for type in types:
-                if callable(type):
-                    type_names.append(type.__name__)
-                else:
-                    type_names.append(type)
-            raise SyntaxError('Unexpected token %s. Expected one of [%s]' %
-                              (next_token, ', '.join(type_names)))
+    return symbols
 
-    def _allow(*types):
-        """Expect one of *types, eat if correct, ignore if not"""
-        try:
-            return _expect(*types)
-        except SyntaxError:
-            pass
-
-    def defn(fn):
-        defn_name = fn.__name__.lstrip('_')
-        @functools.wraps(fn)
-        def inner(*args, **kwargs):
-            token = fn(*args, **kwargs)
-            if token is not None:
-                return (defn_name, token)
-            else:
-                return None
-        return inner
-
-    def _zero_or_more(fn):
-        or_more = []
-        while True:
-            ret = _allow(fn)
-            if ret is None:
-                break
-            else:
-                or_more.append(ret)
-        return or_more
-
-    @defn
-    def _atom():
-        return _expect('NAME', 'NUMBER', 'STRING')
-
-    @defn
-    def _value_stmt():
-        return _expect(_fcall_stmt, _atom)
-
-    @defn
-    def _fcall_stmt():
-        return _expect('NAME'), _expect(_arguments)
-
-    @defn
-    def _arguments():
-        _expect('OPEN_PAREN')
-        args = _zero_or_more(_argdef)
-        _expect('CLOSE_PAREN')
-        return args
-
-    @defn
-    def _argdef():
-        value_stmt = _expect(_value_stmt)
-        _allow('COMMA')
-        return value_stmt
-
-    while _cur() < len(tokens):
-        t = tokens[_cur()]
-
-        if t.type == 'RESERVED':
-            if t.text == 'def':
-                funcname = _eat('IDENTIFIER')
-
-                # Begin argument list
-                _eat('OPEN_PAREN')
-                args = []
-                _iter = lambda: _eat('CLOSE_PAREN', 'IDENTIFIER')
-                arg = _iter()
-                while arg.type != 'CLOSE_PAREN':
-                    args.append(arg)
-                    next = _eat('CLOSE_PAREN', 'COMMA')
-                    if next.type == 'CLOSE_PAREN':
-                        break
-                    arg = _iter()
-
-                # Begin block
-                _eat('BLOCK_BEGIN')
-
-                defn = FunctionDefinition(funcname, args)
-                statements.append(defn)
-
-        _skip()
-
-    return statements

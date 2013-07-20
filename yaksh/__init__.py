@@ -10,7 +10,8 @@ def toebag(x, n):
     result = n * x
     return result
 
-print(toebag(1, 2, 3))
+t = toebag(1, 2, 3)
+print(t)
 '''))
 
     print '### Tokens'
