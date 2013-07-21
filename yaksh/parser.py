@@ -143,8 +143,18 @@ def operator():
 
 
 def value():
-    if _accept('NAME') or _accept('NUMBER'):
-        return _endsym('value')
+    if _accept('NAME'):
+        if _accept('OPEN_PAREN', False):
+            fcall = _endsym('fcall')
+            args = arglist()
+            _term('CLOSE_PAREN')
+            fcall.symbols.append(args)
+            return Symbol('value', (fcall,))
+        else:
+            return _endsym('value')
+    else:
+        if _accept('NUMBER'):
+            return _endsym('value')
 
 
 def value_stmt():
@@ -166,7 +176,6 @@ def value_stmt():
     return Symbol('value_stmt', symbols)
 
 
-
 def arglist():
     args = []
     while True:
@@ -181,12 +190,14 @@ def arglist():
 
 
 def reserved_stmt():
-    if _accept('R_RETURN', False):
+    if _accept('R_RETURN'):
         r = _endsym('return_stmt')
         return_value = value_stmt()
         if return_value:
-            r.symbols = (r,)
+            r.symbols = (return_value,)
         return r
+    elif _accept('R_PASS'):
+        return _endsym('pass_stmt')
 
 
 def stmt():
@@ -215,17 +226,25 @@ def stmt():
 
 def block():
     statements = []
+    block_indent_level = None
     while True:
         _eat_newlines()
         if not _accept('INDENT'):
             break
         indent = _endsym('indent')
+        indent_level = len(indent.symbols[0].text)
+        if block_indent_level != indent_level:
+            if block_indent_level is None:
+                block_indent_level = indent_level
+            else:
+                raise ValueError('Mixed indentation %r' % indent)
+
         if _accept('NEWLINE'):
             continue
 
         s = stmt()
         if s:
-            statements.append((indent, s))
+            statements.append(s)
         else:
             break
     return Symbol('block', statements)
@@ -276,4 +295,17 @@ def parse(tokens):
                 _next()
 
     return symbols
+
+
+# God, what a terrible name
+def tuplify_symbols(symbols):
+    def _symbol_to_list(symbol):
+        if isinstance(symbol, Symbol):
+            return symbol.name, tuplify_symbols(symbol.symbols)
+        else:
+            return symbol
+    tuplified = []
+    for symbol in symbols:
+        tuplified.append(_symbol_to_list(symbol))
+    return tuplified
 

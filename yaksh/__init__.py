@@ -1,5 +1,5 @@
 from yaksh.lexer import tokenize, lex
-from yaksh.parser import parse
+from yaksh.parser import parse, tuplify_symbols
 
 
 if __name__ == '__main__':
@@ -11,7 +11,7 @@ def toebag(x, n):
     return result
 
 t = toebag(1, 2, 3)
-print(t)
+print(toebag(1, 2, 3))
 '''))
 
     print '### Tokens'
@@ -21,4 +21,4 @@ print(t)
     tree = parse(tokens)
 
     print '### Parse tree'
-    pprint(tree)
+    pprint(tuplify_symbols(tree))
