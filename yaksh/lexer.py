@@ -26,6 +26,18 @@ DELIMITERS = {
 
 NUMBER_TYPES = {'b', 'x', 'h'}
 
+T_RESERVED = {
+    'def',
+    'return',
+    'if',
+    'elif',
+    'else',
+    'for',
+    'in',
+    'is',
+    'pass',
+}
+
 
 class Token(object):
     def __init__(self, type, text, line_no, char_no):
@@ -85,7 +97,17 @@ def lex(s):
     def _end_token():
         if curtype:
             assert len(curtype) == 1
-            t = Token(curtype[0], ''.join(chars), line_no, char_no - len(chars))
+            token_type = curtype[0]
+            token_text = ''.join(chars)
+            if token_type == 'INTEGER':
+                token_type = 'NUMBER'
+            elif token_type == 'IDENTIFIER':
+                token_text = token_text.strip()
+                if token_text in T_RESERVED:
+                    token_type = 'R_' + token_text.upper()
+                else:
+                    token_type = 'NAME'
+            t = Token(token_type, token_text, line_no, char_no - len(chars))
             tokens.append(t)
             curtype[:] = []
         chars[:] = []
@@ -166,48 +188,12 @@ def lex(s):
     return tokens
 
 
-T_RESERVED = (
-    'def',
-    'return',
-    'if',
-    'elif',
-    'else',
-    'for',
-    'in',
-    'is',
-)
-
-
-def tokenize(lex_tokens):
-    """Lexer pass 2. Does a little more categorization."""
-    tokens = []
-    cur = 0
-
-    while cur < len(lex_tokens):
-        t = lex_tokens[cur]
-        if t.type == 'IDENTIFIER':
-            t.text = t.text.strip()
-            if t.text in T_RESERVED:
-                t.type = 'R_' + t.text.upper()
-            else:
-                t.type = 'NAME'
-        elif t.type == 'INTEGER':
-            t.type = 'NUMBER'
-
-        # Capture the token
-        if t is not None:
-            tokens.append(t)
-        cur += 1
-
-    return tokens
-
-
 if __name__ == '__main__':
     from pprint import pprint
-    pprint(tokenize(lex('''
+    pprint(lex('''
 def toebag(x, n, *rest):
     result = n * x
     return result
 
 print(toebag(1, 2, 3))
-''')))
+'''))
