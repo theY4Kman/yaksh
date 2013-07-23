@@ -49,7 +49,7 @@ argdef: value_stmt
 
 atom: NAME | NUMBER | STRING
 """
-from yaksh.lexer import OPERATORS
+from yaksh.lexer import OPERATORS, Token
 
 
 class Symbol(object):
@@ -151,17 +151,26 @@ def value():
             fcall.symbols.append(args)
             return Symbol('value', (fcall,))
         else:
-            return _endsym('value')
+            var = _endsym('var')
+            return _sym('value', (var,))
     else:
         if _accept('NUMBER'):
-            return _endsym('value')
+            number = _endsym('number')
+            return _sym('value', (number,))
+        elif _accept('LITERAL'):
+            literal = _endsym('literal')
+            return _sym('value', (literal,))
 
 
 def value_stmt():
     symbols = []
     v = value()
     if not v:
-        raise ValueError('Expected a value')
+        if _accept('OPEN_PAREN', False):
+            v = value_stmt()
+            _expect('CLOSE_PAREN', False)
+        else:
+            raise ValueError('Expected a value')
     symbols.append(v)
     while True:
         op = operator()
@@ -208,6 +217,12 @@ def stmt():
             value = value_stmt()
             if not value:
                 raise ValueError('Expected a value statement')
+            if assign.symbols[1].text[0] != '=':
+                # Operator assignment, let's add in tokens to simplify interp
+                op = assign.symbols[1].text[0]
+                optok = Token(OPERATORS[op], op, -1, -1)
+                v_sym = (assign.symbols[0], optok, value)
+                value = _sym('value_stmt', v_sym)
             assign.symbols.append(value)
             return assign
         elif _accept('OPEN_PAREN', False):
@@ -217,7 +232,7 @@ def stmt():
             fcall.symbols.append(args)
             return fcall
         elif _accept('NEWLINE'):
-            return _endsym('name')
+            return _endsym('var')
         else:
             raise ValueError('Not a valid statement')
     else:

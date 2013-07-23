@@ -160,6 +160,17 @@ def lex(s):
                     _single('UNKNOWN')
             else:
                 _single('ASSIGN')
+        elif c in ('"', "'"):
+            q = c
+            _skip(1)
+            c = s[_cur()]
+            while c != q:
+                _token('LITERAL')
+                _skip(1)
+                c = s[_cur()]
+                if c is None:
+                    raise SyntaxError('Unterminated literal')
+            _end_token()
         elif c in OPERATORS:
             _single(OPERATORS[c])
         elif c in DELIMITERS:
