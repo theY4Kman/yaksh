@@ -27,27 +27,6 @@ Assumptions I've made and thought were notable while writing the grammar:
 
 Well, after all that planning and research, I _was_ able to jump in and write
 something that does some kind of parsing :P
-
-
-
-script: (NEWLINE | stmt)*
-
-stmt: simple_stmt | compound_stmt
-simple_stmt: reserved_stmt | assign_stmt | value_stmt
-value_stmt: fcall_stmt | atom
-reserved_stmt: return_stmt | 'continue' | 'break'
-
-return_stmt: 'return' value_stmt
-
-fdef: 'def' NAME parameters
-parameters: '(' + paramdef* ')'
-paramdef: (NAME ',') | NAME
-
-fcall_stmt: NAME arguments
-arguments: '(' + argdef* ')'
-argdef: value_stmt
-
-atom: NAME | NUMBER | STRING
 """
 from yaksh.lexer import OPERATORS, Token
 
@@ -76,6 +55,7 @@ cur_sym = None
 cur_idx = None
 cur = None
 _tokens = []
+block_indent_level = None
 
 
 def _next():
@@ -205,6 +185,7 @@ def reserved_stmt():
         if return_value:
             r.symbols = (return_value,)
         return r
+
     elif _accept('R_PASS'):
         return _endsym('pass_stmt')
 
@@ -236,12 +217,16 @@ def stmt():
         else:
             raise ValueError('Not a valid statement')
     else:
-        return reserved_stmt()
+        reserved = reserved_stmt()
+        if reserved:
+            return reserved
+        else:
+            return value_stmt()
 
 
 def block():
-    statements = []
     block_indent_level = None
+    statements = []
     while True:
         _eat_newlines()
         if not _accept('INDENT'):
@@ -323,4 +308,3 @@ def tuplify_symbols(symbols):
     for symbol in symbols:
         tuplified.append(_symbol_to_list(symbol))
     return tuplified
-

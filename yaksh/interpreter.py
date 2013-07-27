@@ -5,7 +5,7 @@ OPERATOR_FUNCS = {
     '+': lambda r, l: r + l,
 }
 
-RESERVED_STMTS = {'return_stmt', 'pass_stmt'}
+RESERVED_STMTS = {'return_stmt', 'pass_stmt', 'if_stmt'}
 
 
 class Function(object):
@@ -19,7 +19,6 @@ class Function(object):
     def __call__(self, *args):
         scope = dict(zip(self.parameters, args))
         self.interp.stack.append(scope)
-        rv = None
         for symbol in self.block.symbols:
             if self.interp.should_return:
                 break
@@ -154,13 +153,11 @@ class Interpreter(object):
     def eval_reserved_stmt(self, reserved_stmt):
         if reserved_stmt.name == 'return_stmt':
             self.eval_return_stmt(reserved_stmt)
-
-    def run(self):
-        for symbol in self.symbols:
-            if symbol.name == 'fdef':
-                self.define_function(symbol)
-            else:
-                self.eval_stmt(symbol)
+        elif reserved_stmt.name == 'pass_stmt':
+            pass
+        else:
+            raise NotImplementedError('Reserved statement %s' %
+                                      reserved_stmt.name)
 
     def eval_stmt(self, stmt):
         if stmt.name in RESERVED_STMTS:
@@ -181,3 +178,10 @@ class Interpreter(object):
         if return_stmt.symbols:
             rv_stmt = return_stmt.symbols[0]
             self.return_value = self.eval_value_stmt(rv_stmt)
+
+    def run(self):
+        for symbol in self.symbols:
+            if symbol.name == 'fdef':
+                self.define_function(symbol)
+            else:
+                self.eval_stmt(symbol)
