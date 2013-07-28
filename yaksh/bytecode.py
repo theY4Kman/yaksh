@@ -1,6 +1,7 @@
 """
 A bytecode compiler for this god-forsaken language.
 """
+from contextlib import contextmanager
 
 try:
     from cStringIO import StringIO
@@ -27,6 +28,7 @@ class BytecodeGenerator(object):
         self._globals = {}
         self._func_globals = []
         self._funcs = []
+        self._func_names = {}
 
     def _(self, asm):
         self._bc.write(asm)
@@ -47,20 +49,32 @@ class BytecodeGenerator(object):
     def mult(self):
         self._('MULT')
 
-    def store_var(self, index):
-        self._('STORE_VAR %d' % index)
+    def retn(self):
+        self._('RETN')
 
-    def store_global(self, index):
-        self._('STORE_GLOBAL %d' % index)
+    def call(self, func_idx):
+        self._('CALL %d' % func_idx)
+
+    def store_var(self, local_index):
+        self._('STORE_VAR %d' % local_index)
+
+    def store_global(self, global_idx):
+        self._('STORE_GLOBAL %d' % global_idx)
 
     def load_const(self, value):
         self._('LOAD_CONST %s' % value)
 
-    def load_global(self, index):
-        self._('LOAD_GLOBAL %d' % index)
+    def load_global(self, global_idx):
+        self._('LOAD_GLOBAL %d' % global_idx)
 
-    def load_local(self, index):
-        self._('LOAD_LOCAL %d' % index)
+    def load_local(self, local_idx):
+        self._('LOAD_LOCAL %d' % local_idx)
+
+    def proc(self):
+        self._('PROC')
+
+    def make_function(self):
+        self._('MAKE_FUNCTION')
 
     #############
     # Utilities #
@@ -99,6 +113,24 @@ class BytecodeGenerator(object):
             self._globals[name] = index
         self.store_global(index)
 
+    @contextmanager
+    def _define_function(self, funcname):
+        bytecode = self._bc
+        self._bc = StringIO()
+
+        self.proc()
+        old_locals = self._locals
+        self._locals = {}
+
+        yield
+
+        self._locals = old_locals
+        self._func_names[funcname] = len(self._funcs)
+        self._funcs.append(self._bc.getvalue())
+        self.make_function()
+
+        self._bc = bytecode
+
     #################################
     # SYMBOL TRANSFORMATION METHODS #
     #################################
@@ -112,18 +144,27 @@ class BytecodeGenerator(object):
                 # Operator
                 ops.append(v.symbols[0].text)
 
-        while ops:
-            for i in xrange(2):
-                v = vals.pop()
-                if v is None:
-                    pass
-                elif v.name == 'value_stmt':
-                    self.gen_value_stmt(v)
-                elif v.name == 'value':
-                    self.gen_value(v)
+        if ops:
+            while ops:
+                for i in xrange(2):
+                    v = vals.pop()
+                    if v is None:
+                        pass
+                    elif v.name == 'value_stmt':
+                        self.gen_value_stmt(v)
+                    elif v.name == 'value':
+                        self.gen_value(v)
 
-            getattr(self, self.OP_FUNCS[ops.pop()])()
-            vals.append(None)
+                getattr(self, self.OP_FUNCS[ops.pop()])()
+                vals.append(None)
+        else:
+            v = vals.pop()
+            if v.name == 'value_stmt':
+                self.gen_value_stmt(v)
+            elif v.name == 'value':
+                self.gen_value(v)
+            else:
+                raise NotImplementedError('wat?')
 
     def gen_value(self, value):
         val_sym = value.symbols[0]
@@ -136,6 +177,8 @@ class BytecodeGenerator(object):
                 self.load_local(self._locals[name])
             except KeyError:
                 self.load_global(name)
+        elif val_sym.name == 'fcall':
+            self.gen_fcall(val_sym)
         else:
             raise NotImplementedError()
 
@@ -146,14 +189,66 @@ class BytecodeGenerator(object):
         name = assign.symbols[0].text
         self._store_var(name)
 
+    def gen_reserved(self, reserved):
+        if reserved.name == 'return_stmt':
+            if reserved.symbols:
+                self.gen_value_stmt(reserved.symbols[0])
+            self.retn()
+        elif reserved.name == 'pass':
+            pass
+        else:
+            raise NotImplementedError()
+
+    def gen_fcall(self, fcall):
+        funcname = fcall.symbols[0].text
+        try:
+            func_idx = self._func_names[funcname]
+        except KeyError:
+            raise NameError("name '%s' does not exist" % funcname)
+
+        arglist = fcall.symbols[1]
+        for arg in arglist.symbols:
+            self.gen_value_stmt(arg)
+
+        self.call(func_idx)
+
+    def gen_stmt(self, stmt):
+        if stmt.name in RESERVED_STMTS:
+            self.gen_reserved(stmt)
+        elif stmt.name == 'assign':
+            self.gen_assign(stmt)
+        elif stmt.name == 'fcall':
+            self.gen_fcall(stmt)
+        elif stmt.name == 'value_stmt':
+            self.gen_value_stmt(stmt)
+        else:
+            raise NotImplementedError('Symbol type %s' % stmt.name)
+
+    def gen_fdef(self, fdef):
+        name_sym = fdef.symbols[0]
+        funcname = name_sym.symbols[0].text
+
+        with self._define_function(funcname):
+            parameters_list = fdef.symbols[1].symbols
+            last_param_idx = len(parameters_list) - 1
+            for p in parameters_list:
+                param = p.text
+                self._locals[param] = idx = len(self._locals)
+                self.store_var(last_param_idx - idx)
+
+            block = fdef.symbols[2]
+            for stmt in block.symbols:
+                self.gen_stmt(stmt)
+
     #############
     # Generate! #
     #############
     def generate(self):
         for symbol in self.symbols:
-            if symbol.name == 'assign':
-                self.gen_assign(symbol)
-            if symbol.name == 'value_stmt':
-                self.gen_value_stmt(symbol)
-        return self._bc.getvalue()
+            if symbol.name == 'fdef':
+                self.gen_fdef(symbol)
+            else:
+                self.gen_stmt(symbol)
+        funcs = '\n'.join(self._funcs)
+        return '\n'.join((funcs, self._bc.getvalue()))
 

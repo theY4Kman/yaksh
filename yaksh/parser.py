@@ -158,8 +158,14 @@ def value_stmt():
             v = value()
             if not v:
                 raise ValueError('Expected a value')
-            symbols.append(op)
-            symbols.append(v)
+            if op.symbols[0].text in '*/':
+                # Order of operations
+                last_v = symbols.pop()
+                sym = Symbol('value_stmt', (last_v, op, v))
+                symbols.append(sym)
+            else:
+                symbols.append(op)
+                symbols.append(v)
         else:
             break
     return Symbol('value_stmt', symbols)

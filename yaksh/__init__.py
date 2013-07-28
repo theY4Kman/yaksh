@@ -36,7 +36,10 @@ print(toebag(4.2,9.3,1), t, 'PENIS', "TACO")
 
 def bytecode_example():
     symbols = _get_symbols('''
-t = 1 + 2 * 7 + 1
+def test(a, b, c):
+    return a + b * c
+t = test(1, 2, 3)
+f = test(1, 2, 3) + test(4, 5, 6)
 ''')
 
     print "### Bytecode Output"
