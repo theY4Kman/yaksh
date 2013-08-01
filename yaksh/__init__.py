@@ -1,4 +1,5 @@
-from yaksh.bytecode import BytecodeGenerator
+from yaksh.bytecode_asm import BytecodeAssemblyGenerator
+from yaksh.bytecode_compiler import assemble
 from yaksh.interpreter import Interpreter
 from yaksh.lexer import lex
 from yaksh.parser import parse, tuplify_symbols
@@ -40,11 +41,17 @@ def test(a, b, c):
     return a + b * c
 t = test(1, 2, 3)
 f = test(1, 2, 3) + test(4, 5, 6)
+test('fuck y\\'all!', 'a', 'c')
 ''')
 
-    print "### Bytecode Output"
-    bytecode = BytecodeGenerator(symbols)
-    print bytecode.generate()
+    print "### Bytecode Assembly"
+    bc_gen = BytecodeAssemblyGenerator(symbols)
+    bc_asm = bc_gen.generate()
+    print bc_asm
+    print
+
+    print '### Bytecode'
+    print repr(assemble(bc_asm))
 
 
 if __name__ == '__main__':

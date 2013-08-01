@@ -59,6 +59,7 @@ def lex(s):
     cur = [0]
     line_no = 0
     char_no = 0
+    c = None
 
     def _cur(assn=None):
         if assn is None:
@@ -163,12 +164,18 @@ def lex(s):
         elif c in ('"', "'"):
             q = c
             _skip(1)
-            c = s[_cur()]
+            c = _peek(0)
             while c != q:
-                _token('LITERAL')
-                _skip(1)
-                c = s[_cur()]
-                if c is None:
+                if c == '\\' and _peek(1) == q:
+                    _skip(1)
+                    c = q
+                    _token('LITERAL')
+                    _skip(1)
+                else:
+                    _token('LITERAL')
+                    _skip(1)
+                c = _peek(0)
+                if not c:
                     raise SyntaxError('Unterminated literal')
             _end_token()
         elif c in OPERATORS:

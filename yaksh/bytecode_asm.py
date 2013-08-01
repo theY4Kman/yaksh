@@ -12,7 +12,7 @@ except ImportError:
 RESERVED_STMTS = {'return_stmt', 'pass_stmt', 'if_stmt'}
 
 
-class BytecodeGenerator(object):
+class BytecodeAssemblyGenerator(object):
     OP_FUNCS = {
         '+': 'add',
         '-': 'sub',
@@ -171,6 +171,8 @@ class BytecodeGenerator(object):
         if val_sym.name == 'number':
             number = self._get_number_const(val_sym)
             self.load_const(number)
+        elif val_sym.name == 'literal':
+            self.load_const("'%s'" % val_sym.symbols[0].text)
         elif val_sym.name == 'var':
             name = val_sym.symbols[0].text
             try:
