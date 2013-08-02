@@ -126,8 +126,8 @@ class BytecodeAssemblyGenerator(object):
 
         self._locals = old_locals
         self._func_names[funcname] = len(self._funcs)
-        self._funcs.append(self._bc.getvalue())
         self.make_function()
+        self._funcs.append(self._bc.getvalue())
 
         self._bc = bytecode
 

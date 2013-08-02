@@ -3,6 +3,7 @@ from yaksh.bytecode_compiler import assemble
 from yaksh.interpreter import Interpreter
 from yaksh.lexer import lex
 from yaksh.parser import parse, tuplify_symbols
+from yaksh.vm import AbstractMachine
 
 
 def _get_symbols(source):
@@ -41,7 +42,6 @@ def test(a, b, c):
     return a + b * c
 t = test(1, 2, 3)
 f = test(1, 2, 3) + test(4, 5, 6)
-test('fuck y\\'all!', 'a', 'c')
 ''')
 
     print "### Bytecode Assembly"
@@ -51,7 +51,13 @@ test('fuck y\\'all!', 'a', 'c')
     print
 
     print '### Bytecode'
-    print repr(assemble(bc_asm))
+    bytecode = assemble(bc_asm)
+    print repr(bytecode)
+    print
+
+    print '### VM Start'
+    vm = AbstractMachine(bytecode)
+    vm.run()
 
 
 if __name__ == '__main__':

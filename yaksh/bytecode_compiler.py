@@ -33,7 +33,25 @@ Extra notes:
 import struct
 
 
+MAGIC = '\x42YAK'
+
+
+class _InstrMeta(type):
+    """Because I'm too lazy to manually write an instruction->name map"""
+
+    def __new__(meta, name, bases, attrs):
+        cls = type.__new__(meta, name, bases, attrs)
+        names = {}
+        for name, value in attrs.iteritems():
+            if isinstance(value, int):
+                names[value] = name.lower()
+        cls._names = names
+        return cls
+
+
 class Instr(object):
+    __metaclass__ = _InstrMeta
+
     ADD         = 1
     SUB         = 2
     DIV         = 3
@@ -55,6 +73,7 @@ class Instr(object):
         MULT,
         RETN,
         PROC,
+        MAKE_FUNCTION,
     )
 
     ONE_PARAM = (
@@ -64,7 +83,6 @@ class Instr(object):
         LOAD_CONST,
         LOAD_GLOBAL,
         LOAD_LOCAL,
-        MAKE_FUNCTION,
     )
 
 
@@ -157,4 +175,4 @@ def assemble(asm):
     p_const_size = struct.pack('I', len(p_consts))
     p_pieces = ''.join(pieces)
 
-    return ''.join((p_const_size, p_consts, p_pieces))
+    return ''.join((MAGIC, p_const_size, p_consts, p_pieces))
