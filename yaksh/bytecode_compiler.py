@@ -52,19 +52,19 @@ class _InstrMeta(type):
 class Instr(object):
     __metaclass__ = _InstrMeta
 
-    ADD         = 1
-    SUB         = 2
-    DIV         = 3
-    MULT        = 4
-    RETN        = 5
-    CALL        = 6
-    STORE_VAR   = 7
-    STORE_GLOBAL= 8
-    LOAD_CONST  = 9
-    LOAD_GLOBAL = 10
-    LOAD_LOCAL  = 11
-    PROC        = 12
-    MAKE_FUNCTION=13
+    ADD             = 1
+    SUB             = 2
+    DIV             = 3
+    MULT            = 4
+    RETN            = 5
+    CALL            = 6
+    STORE_VAR       = 7
+    STORE_GLOBAL    = 8
+    LOAD_CONST      = 9
+    LOAD_GLOBAL     = 10
+    LOAD_LOCAL      = 11
+    PROC            = 12
+    MAKE_FUNCTION   = 13
 
     NO_PARAMS = (
         ADD,
