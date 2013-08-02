@@ -126,8 +126,11 @@ def lex(s):
             curtype.append(type)
         chars.append(c)
 
-    def _change_type(type):
+    def _set_type(type):
         curtype[:] = [type]
+
+    def _change_type(type):
+        _set_type(type)
         chars.append(c)
 
     while _cur() < len(s):
@@ -162,6 +165,10 @@ def lex(s):
             else:
                 _single('ASSIGN')
         elif c in ('"', "'"):
+            # If there's an empty string, _token won't be called to set the
+            # token type
+            _set_type('LITERAL')
+
             q = c
             _skip(1)
             c = _peek(0)

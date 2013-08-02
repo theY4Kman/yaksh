@@ -65,6 +65,7 @@ class Instr(object):
     LOAD_LOCAL      = 11
     PROC            = 12
     MAKE_FUNCTION   = 13
+    CALL_BUILTIN    = 14
 
     NO_PARAMS = (
         ADD,
@@ -83,6 +84,7 @@ class Instr(object):
         LOAD_CONST,
         LOAD_GLOBAL,
         LOAD_LOCAL,
+        CALL_BUILTIN,
     )
 
 

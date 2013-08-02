@@ -10,6 +10,9 @@ except ImportError:
 
 
 RESERVED_STMTS = {'return_stmt', 'pass_stmt', 'if_stmt'}
+BUILTINS = (
+    'print',
+)
 
 
 class BytecodeAssemblyGenerator(object):
@@ -75,6 +78,9 @@ class BytecodeAssemblyGenerator(object):
 
     def make_function(self):
         self._('MAKE_FUNCTION')
+
+    def call_builtin(self, builtin_idx):
+        self._('CALL_BUILTIN %d' % builtin_idx)
 
     #############
     # Utilities #
@@ -177,8 +183,12 @@ class BytecodeAssemblyGenerator(object):
             name = val_sym.symbols[0].text
             try:
                 self.load_local(self._locals[name])
-            except KeyError:
-                self.load_global(name)
+            except (KeyError, TypeError):
+                try:
+                    self.load_global(self._globals[name])
+                except KeyError:
+                    raise ValueError("Global or local var '%s' does not "
+                                     "exist" % name)
         elif val_sym.name == 'fcall':
             self.gen_fcall(val_sym)
         else:
@@ -204,15 +214,20 @@ class BytecodeAssemblyGenerator(object):
     def gen_fcall(self, fcall):
         funcname = fcall.symbols[0].text
         try:
-            func_idx = self._func_names[funcname]
-        except KeyError:
-            raise NameError("name '%s' does not exist" % funcname)
+            func_idx = BUILTINS.index(funcname)
+            call = self.call_builtin
+        except ValueError:
+            try:
+                func_idx = self._func_names[funcname]
+                call = self.call
+            except KeyError:
+                raise NameError("name '%s' does not exist" % funcname)
 
         arglist = fcall.symbols[1]
         for arg in arglist.symbols:
             self.gen_value_stmt(arg)
 
-        self.call(func_idx)
+        call(func_idx)
 
     def gen_stmt(self, stmt):
         if stmt.name in RESERVED_STMTS:

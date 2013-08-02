@@ -1,4 +1,5 @@
 import struct
+from yaksh.bytecode_asm import BUILTINS
 from yaksh.bytecode_compiler import MAGIC, Const, Instr
 
 
@@ -6,7 +7,38 @@ class Return(Exception):
     pass
 
 
-class VirtualMachine(object):
+class _VirtualMachinePartial(object):
+    def _pop(self):
+        return self._stack.pop()
+
+    def _push(self, v):
+        self._stack.append(v)
+
+
+class Builtins(_VirtualMachinePartial):
+    """Implements built-in functions"""
+
+    def __init__(self, vm):
+        self._stack = vm._stack
+
+    def call(self, idx):
+        try:
+            name = BUILTINS[idx]
+        except IndexError:
+            raise RuntimeError('Unknown builtin index %d.' % idx)
+
+        try:
+            builtin = getattr(self, 'do_' + name)
+        except AttributeError:
+            raise NotImplementedError('%s builtin not implemented' % name)
+
+        self._push(builtin())
+
+    def do_print(self):
+        print self._pop()
+
+
+class VirtualMachine(_VirtualMachinePartial):
     """Handles the actual execution of instructions"""
 
     def __init__(self, am):
@@ -14,32 +46,27 @@ class VirtualMachine(object):
         self._stack = []
         self._ctx_stack = []
         self._globals = {}
-
-    def _pop(self):
-        return self._stack.pop()
-
-    def _push(self, v):
-        self._stack.append(v)
+        self._builtins = Builtins(self)
 
     def add(self):
-        r = self._pop()
         l = self._pop()
-        self._push(r + l)
+        r = self._pop()
+        self._push(l + r)
 
     def sub(self):
-        r = self._pop()
         l = self._pop()
-        self._push(r - l)
+        r = self._pop()
+        self._push(l - r)
 
     def div(self):
-        r = self._pop()
         l = self._pop()
-        self._push(r / l)
+        r = self._pop()
+        self._push(l / r)
 
     def mult(self):
-        r = self._pop()
         l = self._pop()
-        self._push(r * l)
+        r = self._pop()
+        self._push(l * r)
 
     def retn(self):
         raise Return()
@@ -94,6 +121,9 @@ class VirtualMachine(object):
 
     def make_function(self):
         raise RuntimeError('MAKE_FUNCTION instruction should never be executed.')
+
+    def call_builtin(self, builtin_idx):
+        self._builtins.call(builtin_idx)
 
     def execute(self, instructions):
         for instr, arg in instructions:
