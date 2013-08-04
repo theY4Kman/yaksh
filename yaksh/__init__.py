@@ -79,10 +79,13 @@ if __name__ == '__main__':
     # print '############### END INTERPRETER EXAMPLE ###############'
     # print
     bytecode_example('''
+a = 24
 if 1 - 1:
     print('hello!')
-elif 1 + 1:
+elif 1 + 1 - 2:
     print('Oh, shit yayer')
+elif a:
+    print('aaaaaa')
 else:
     print('wat?')
 pass

@@ -152,6 +152,7 @@ class BytecodeAssemblyGenerator(object):
         self._label_counters.append(0)
         yield
         self._label_counters.pop()
+        self._label_counters[-1] += 1
 
     def _get_next_label(self, rel_label):
         # This is not very robust, because a label name like "0_test" would end
@@ -165,7 +166,6 @@ class BytecodeAssemblyGenerator(object):
 
     def _label_next(self, label):
         self._label = label
-        self._label_counters[-1] += 1
 
     #################################
     # SYMBOL TRANSFORMATION METHODS #
@@ -256,6 +256,7 @@ class BytecodeAssemblyGenerator(object):
                                                 JMP         [chain_end]
                             else:
             chain_next2:        pass            PASS
+            chain_end       pass                PASS
 
         """
         with self._local_labels():
@@ -263,6 +264,7 @@ class BytecodeAssemblyGenerator(object):
             for test_stmt in if_chain.test_stmts:
                 self.gen_value_stmt(test_stmt.cond)
                 next_label = self._get_next_label('chain_next%d' % label_idx)
+                label_idx += 1
                 self.jz(next_label)
                 for stmt in test_stmt.block.symbols:
                     self.gen_stmt(stmt)
@@ -272,6 +274,7 @@ class BytecodeAssemblyGenerator(object):
             if if_chain.else_stmt:
                 for stmt in if_chain.else_stmt.block.symbols:
                     self.gen_stmt(stmt)
+
             self._label_next('chain_end')
 
     def gen_reserved(self, reserved):

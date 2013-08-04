@@ -262,6 +262,8 @@ class _BaseTestStmt(Symbol):
         super(_BaseTestStmt, self).__init__(*args, **kwargs)
         self.text = self.symbols[0].text
 
+
+class _BaseCondTestStmt(_BaseTestStmt):
     @property
     def cond(self):
         return self.symbols[1]
@@ -274,16 +276,21 @@ class _BaseTestStmt(Symbol):
         return '%s %s:\n%s' % (self.text, self.cond, self.block)
 
 
-class IfStmt(_BaseTestStmt):
+class IfStmt(_BaseCondTestStmt):
     pass
 
 
-class ElifStmt(_BaseTestStmt):
+class ElifStmt(_BaseCondTestStmt):
     pass
 
 
 class ElseStmt(_BaseTestStmt):
-    pass
+    @property
+    def block(self):
+        return self.symbols[1]
+
+    def __str__(self):
+        return '%s:\n%s' % (self.text, self.block)
 
 
 class Block(Symbol):
@@ -483,16 +490,23 @@ def reserved_stmt():
             if not _block:
                 raise ValueError('Expected a block')
             if_piece.symbols.append(_block)
-
             if_pieces.append(if_piece)
-            elif_sym = _accept('R_ELIF')
-            if elif_sym:
+
+            if _accept('R_ELIF'):
                 if_piece = _endsym('elif_stmt')
             else:
                 break
 
-        return _sym('if_chain', if_pieces)
+        if _accept('R_ELSE'):
+            else_stmt = _endsym('else_stmt')
+            _expect('BLOCK_BEGIN', False)
+            _block = block()
+            if not _block:
+                raise ValueError('Expected a block')
+            else_stmt.symbols.append(_block)
+            if_pieces.append(else_stmt)
 
+        return _sym('if_chain', if_pieces)
 
     elif _accept('R_PASS'):
         return _endsym('pass_stmt')

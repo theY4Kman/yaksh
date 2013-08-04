@@ -132,15 +132,19 @@ class VirtualMachine(_VirtualMachinePartial):
     def y_pass(self):
         pass
 
-    def jz(self, local_ptr):
-        if self._pop() == 0:
+    def _jmp_if(self, cond, local_ptr):
+        if cond:
             # The -1 to counteract the += 1 in execute loop
             self._ip = local_ptr - 1
 
+    def jz(self, local_ptr):
+        self._jmp_if(self._pop() == 0, local_ptr)
+
     def jnz(self, local_ptr):
-        if self._pop() != 0:
-            # The -1 to counteract the += 1 in execute loop
-            self._ip = local_ptr - 1
+        self._jmp_if(self._pop() != 0, local_ptr)
+
+    def jmp(self, local_ptr):
+        self._ip = local_ptr - 1
 
     def execute(self, instructions):
         self._ip = 0
