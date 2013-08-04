@@ -1,7 +1,7 @@
 import struct
 
 from yaksh.bytecode_asm import BUILTINS
-from yaksh.bytecode_compiler import MAGIC, Const, Instr
+from yaksh.bytecode_compiler import MAGIC, Const, Instr, Compare
 
 
 class Return(Exception):
@@ -147,6 +147,9 @@ class VirtualMachine(_VirtualMachinePartial):
 
     def jmp(self, local_ptr):
         self._ip = local_ptr - 1
+
+    def cmp(self, op):
+        self._push(Compare.cmp(op, self._pop(), self._pop()))
 
     def execute(self, instructions):
         self._ip = 0

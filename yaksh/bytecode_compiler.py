@@ -45,8 +45,6 @@ PYTHON_RESERVED = ('pass',)
 
 
 class _InstrMeta(type):
-    """Because I'm too lazy to manually write an instruction->name map"""
-
     def __new__(meta, name, bases, attrs):
         cls = type.__new__(meta, name, bases, attrs)
         names = {}
@@ -81,6 +79,7 @@ class Instr(object):
     JZ              = 16
     JNZ             = 17
     JMP             = 18
+    CMP             = 19
 
     NO_PARAMS = (
         ADD,
@@ -93,13 +92,13 @@ class Instr(object):
         PASS,
     )
 
-    JUMPS = (
+    JUMPS = {
         JZ,
         JNZ,
         JMP,
-    )
+    }
 
-    ONE_PARAM = (
+    ONE_PARAM = {
         CALL,
         STORE_VAR,
         STORE_GLOBAL,
@@ -107,7 +106,8 @@ class Instr(object):
         LOAD_GLOBAL,
         LOAD_LOCAL,
         CALL_BUILTIN,
-    ) + JUMPS
+        CMP,
+    }.union(JUMPS)
 
 
 class Const(object):
@@ -130,6 +130,44 @@ class Const(object):
             raise NotImplementedError()
 
         return struct.pack('B', t) + v_p
+
+
+class _CompareMeta(type):
+    def __new__(meta, name, bases, attrs):
+        cls = type.__new__(meta, name, bases, attrs)
+        names = {}
+        for name, value in attrs.iteritems():
+            if isinstance(value, int):
+                names[name] = value
+        cls._names = names
+        return cls
+
+
+class Compare(object):
+    __metaclass__ = _CompareMeta
+
+    ISEQUAL     = 0
+    NOTEQUAL    = 1
+    GT          = 2
+    GTE         = 3
+    LT          = 4
+    LTE         = 5
+
+    _cmp = {
+        ISEQUAL: lambda r, l: r == l,
+        NOTEQUAL: lambda r, l: r != l,
+        GT: lambda r, l: r > l,
+        GTE: lambda r, l: r >= l,
+        LT: lambda r, l: r < l,
+        LTE: lambda r, l: r <= l,
+    }
+
+    @staticmethod
+    def cmp(op, r, l):
+        try:
+            return Compare._cmp[op](r, l)
+        except KeyError:
+            raise NotImplementedError('Unknown comparison op %d' % op)
 
 
 def assemble(asm):

@@ -29,6 +29,7 @@ Well, after all that planning and research, I _was_ able to jump in and write
 something that does some kind of parsing :P
 """
 import re
+from yaksh.bytecode_compiler import Compare
 
 from yaksh.lexer import OPERATORS, Token
 
@@ -303,6 +304,31 @@ class Block(Symbol):
                 (self.INDENT + '    \n').join(str(s) for s in self.symbols))
 
 
+class CmpOp(Symbol):
+    def __init__(self, *args, **kwargs):
+        super(CmpOp, self).__init__(*args, **kwargs)
+        self.token = self.symbols[0]
+        self.name = self.token.type
+
+    def __str__(self):
+        return self.token.text
+
+
+class CmpStmt(Symbol):
+    def __init__(self, *args, **kwargs):
+        super(CmpStmt, self).__init__(*args, **kwargs)
+        self.left = self.symbols[0]
+        self.op_name = self.symbols[1].name
+        try:
+            self.op = Compare._names[self.op_name]
+        except KeyError:
+            raise ValueError('Unknown comparison op %s' % self.op_name)
+        self.right = self.symbols[2]
+
+    def __str__(self):
+        return '%s %s %s' % (self.left, self.symbols[1], self.right)
+
+
 LITERAL_TOKENS = (
     'REAL',
     'INTEGER',
@@ -411,7 +437,10 @@ def value():
 
 
 def cmp_operator():
-   return _accept(('NOTEQUAL', 'ISEQUAL', 'GT', 'LT', 'GTE', 'LTE'))
+    if _accept(('NOTEQUAL', 'ISEQUAL', 'GT', 'LT', 'GTE', 'LTE')):
+        return _endsym('cmp_op')
+    else:
+        return None
 
 
 def _expect_value(allow_empty=False):
@@ -448,8 +477,11 @@ def value_stmt():
         else:
             cmp = cmp_operator()
             if cmp:
-                v = _expect_value()
-                cmp_stmt = _sym('cmp_stmt', (symbols.pop(), cmp, v))
+                right_sym = value_stmt()
+                if not v:
+                    raise ValueError('Expected right-hand cmp value_stmt')
+                left_sym = _sym('value_stmt', (symbols.pop(),))
+                cmp_stmt = _sym('cmp_stmt', (left_sym, cmp, right_sym))
                 symbols.append(cmp_stmt)
             else:
                 break

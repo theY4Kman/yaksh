@@ -95,6 +95,9 @@ class BytecodeAssemblyGenerator(object):
     def jmp(self, label):
         self._('JMP %s' % label)
 
+    def cmp(self, op):
+        self._('CMP %d' % op)
+
     #############
     # Utilities #
     #############
@@ -176,7 +179,7 @@ class BytecodeAssemblyGenerator(object):
         vals = []
         ops = []
         for v in value_stmt.symbols:
-            if v.name in ('value_stmt', 'value'):
+            if v.name in ('cmp_stmt', 'value_stmt', 'value'):
                 vals.append(v)
             else:
                 # Operator
@@ -188,6 +191,10 @@ class BytecodeAssemblyGenerator(object):
                     v = vals.pop()
                     if v is None:
                         pass
+                    elif v.name == 'cmp_stmt':
+                        self.gen_cmp_stmt(v)
+                        vals.append(None)
+                        continue
                     elif v.name == 'value_stmt':
                         self.gen_value_stmt(v)
                     elif v.name == 'value':
@@ -197,12 +204,19 @@ class BytecodeAssemblyGenerator(object):
                 vals.append(None)
         else:
             v = vals.pop()
-            if v.name == 'value_stmt':
+            if v.name == 'cmp_stmt':
+                self.gen_cmp_stmt(v)
+            elif v.name == 'value_stmt':
                 self.gen_value_stmt(v)
             elif v.name == 'value':
                 self.gen_value(v)
             else:
                 raise NotImplementedError('wat?')
+
+    def gen_cmp_stmt(self, cmp_stmt):
+        self.gen_value_stmt(cmp_stmt.right)
+        self.gen_value_stmt(cmp_stmt.left)
+        self.cmp(cmp_stmt.op)
 
     def gen_value(self, value):
         val_sym = value.symbols[0]
@@ -230,37 +244,6 @@ class BytecodeAssemblyGenerator(object):
         self._store_var(assign.var)
 
     def gen_if_chain(self, if_chain):
-        """
-        # @type if_chain:   IfChain
-        TODO: evaluate if condition, leaving result at top of stack
-        TODO: gotta mark instruction at end of if block, and jump to it if the
-              top of the stack is zero.
-
-        Example pseudo-bytecode-asm:
-
-                            if a + b:           LOAD_VAR    0
-                                                LOAD_VAR    1
-                                                ADD
-                                                JZ          [chain_next0]
-                                pass            PASS
-                                                JMP         [chain_end]
-            chain_next0:    elif a - b:         LOAD_VAR    0
-                                                LOAD_VAR    1
-                                                SUB
-                                                JZ          [chain_next1]
-                                pass            PASS
-                                                JMP         [chain_end]
-            chain_next1:    elif a * b:         LOAD_VAR    0
-                                                LOAD_VAR    1
-                                                MULT
-                                                JZ          [chain_next2]
-                                pass            PASS
-                                                JMP         [chain_end]
-                            else:
-            chain_next2:        pass            PASS
-            chain_end       pass                PASS
-
-        """
         with self._local_labels():
             label_idx = 0
             last_test = len(if_chain.symbols) - 1

@@ -1,8 +1,10 @@
 COMPARISONS = {
-    '!': 'NOTEQUAL',
-    '=': 'ISEQUAL',
-    '>': 'GTE',
-    '<': 'LTE',
+    '!=': 'NOTEQUAL',
+    '==': 'ISEQUAL',
+    '>=': 'GTE',
+    '>': 'GT',
+    '<=': 'LTE',
+    '<': 'LT',
 }
 
 OPERATORS = {
@@ -133,6 +135,12 @@ def lex(s):
         _set_type(type)
         chars.append(c)
 
+    def _cmp_op(type):
+        _token(type)
+        chars.append(_peek(1))
+        _skip(1)
+        _end_token()
+
     while _cur() < len(s):
         c = s[_cur()]
         if c.isalpha():
@@ -156,16 +164,17 @@ def lex(s):
             _token('IDENTIFIER')
         elif c == '=':
             if _peek(1) == '=':
-                if c in OPERATORS:
-                    _single(OPERATORS[c] + '_ASSIGN', 1)
-                elif c in COMPARISONS:
-                    _single(COMPARISONS[c], 1)
-                else:
-                    _single('UNKNOWN')
+                _cmp_op('ISEQUAL')
             else:
                 _single('ASSIGN')
-        elif c in '><':
-            _single('GT' if c == '>' else 'LT')
+        elif c in '><!':
+            if _peek(1) == '=':
+                _cmp_op(COMPARISONS[c + '='])
+            else:
+                try:
+                    _single(COMPARISONS[c])
+                except KeyError:
+                    raise ValueError('Unknown operator %s' % c)
         elif c in ('"', "'"):
             # If there's an empty string, _token won't be called to set the
             # token type

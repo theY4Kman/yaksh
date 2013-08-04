@@ -24,7 +24,15 @@ print((4 - 4) / 2)
 
 if 1 + 1:
     print('taco')
-pass
+
+def test_if(a, r, l):
+    if a == 1:
+        return r - l
+    else:
+        return r + l
+
+print(test_if(0, 1, 1))
+print(test_if(1, 1, 1))
 '''
 
 
@@ -78,8 +86,13 @@ if __name__ == '__main__':
     # print
     # print '############### END INTERPRETER EXAMPLE ###############'
     # print
-    bytecode_example('''
-def test(a, b, c):
-    return a + b + c
-print(test(1, 2, 3))
-''')
+    cmps = (
+        '1 == 1',
+        '1 != 1', '1 != 2',
+        '1 >= 1', '1 >= 2', '1 >= 3',
+        '1 <= 2',
+        '1 < 2',
+        '1 > 2',
+    )
+    instrs = ('print(%r)\nprint(%s)\nprint("")' % (s, s) for s in cmps)
+    bytecode_example('\n'.join(instrs))
