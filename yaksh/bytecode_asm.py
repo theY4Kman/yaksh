@@ -16,13 +16,6 @@ BUILTINS = (
 
 
 class BytecodeAssemblyGenerator(object):
-    OP_FUNCS = {
-        '+': 'add',
-        '-': 'sub',
-        '/': 'div',
-        '*': 'mult',
-    }
-
     def __init__(self, symbols):
         self.symbols = symbols
 
@@ -151,7 +144,7 @@ class BytecodeAssemblyGenerator(object):
                 vals.append(v)
             else:
                 # Operator
-                ops.append(v.symbols[0].text)
+                ops.append(v)
 
         if ops:
             while ops:
@@ -164,7 +157,7 @@ class BytecodeAssemblyGenerator(object):
                     elif v.name == 'value':
                         self.gen_value(v)
 
-                getattr(self, self.OP_FUNCS[ops.pop()])()
+                getattr(self, ops.pop().opfunc)()
                 vals.append(None)
         else:
             v = vals.pop()
@@ -180,7 +173,7 @@ class BytecodeAssemblyGenerator(object):
         if val_sym.name == 'number':
             self.load_const(val_sym.value)
         elif val_sym.name == 'literal':
-            self.load_const("'%s'" % val_sym.symbols[0].text)
+            self.load_const("%r" % val_sym)
         elif val_sym.name == 'var':
             name = val_sym.text
             try:
@@ -211,19 +204,17 @@ class BytecodeAssemblyGenerator(object):
             raise NotImplementedError()
 
     def gen_fcall(self, fcall):
-        funcname = fcall.symbols[0].text
         try:
-            func_idx = BUILTINS.index(funcname)
+            func_idx = BUILTINS.index(fcall.func_name)
             call = self.call_builtin
         except ValueError:
             try:
-                func_idx = self._func_names[funcname]
+                func_idx = self._func_names[fcall.func_name]
                 call = self.call
             except KeyError:
-                raise NameError("name '%s' does not exist" % funcname)
+                raise NameError("name '%s' does not exist" % fcall.func_name)
 
-        arglist = fcall.symbols[1]
-        for arg in arglist.symbols:
+        for arg in fcall.args:
             self.gen_value_stmt(arg)
 
         call(func_idx)
@@ -241,19 +232,13 @@ class BytecodeAssemblyGenerator(object):
             raise NotImplementedError('Symbol type %s' % stmt.name)
 
     def gen_fdef(self, fdef):
-        name_sym = fdef.symbols[0]
-        funcname = name_sym.symbols[0].text
-
-        with self._define_function(funcname):
-            parameters_list = fdef.symbols[1].symbols
-            last_param_idx = len(parameters_list) - 1
-            for p in parameters_list:
-                param = p.text
+        with self._define_function(fdef.func_name):
+            last_param_idx = len(fdef.params) - 1
+            for param in fdef.params:
                 self._locals[param] = idx = len(self._locals)
                 self.store_var(last_param_idx - idx)
 
-            block = fdef.symbols[2]
-            for stmt in block.symbols:
+            for stmt in fdef.stmts:
                 self.gen_stmt(stmt)
 
     #############

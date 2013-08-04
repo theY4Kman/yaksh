@@ -127,10 +127,18 @@ class ReturnStmt(Symbol):
 
 
 class Operator(Symbol):
+    OP_FUNCS = {
+        'PLUS': 'add',
+        'MINUS': 'sub',
+        'TIMES': 'mult',
+        'SLASH': 'div',
+    }
+
     def __init__(self, *args, **kwargs):
         super(Operator, self).__init__(*args, **kwargs)
         self.text = self.symbols[0].text
         self.opname = OPERATORS[self.text]
+        self.opfunc = self.OP_FUNCS[self.opname]
 
     def __str__(self):
         return self.text
@@ -154,7 +162,7 @@ class Literal(Symbol):
         super(Literal, self).__init__(*args, **kwargs)
         self.text = self.symbols[0].text
 
-    def __str__(self):
+    def __repr__(self):
         return repr(self.text)
 
 
@@ -166,6 +174,10 @@ class Fcall(Symbol):
     @property
     def arglist(self):
         return self.symbols[1]
+
+    @property
+    def args(self):
+        return self.arglist.symbols
 
     def __str__(self):
         return '%s(%s)' % (self.func_name, self.arglist)
@@ -186,8 +198,12 @@ class Var(Symbol):
 
 
 class Parameters(Symbol):
+    @property
+    def names(self):
+        return [s.text for s in self.symbols]
+
     def __str__(self):
-        return ', '.join(s.text for s in self.symbols)
+        return ', '.join(self.names)
 
 
 class Fdef(Symbol):
@@ -202,8 +218,16 @@ class Fdef(Symbol):
         return self.symbols[1]
 
     @property
+    def params(self):
+        return self.parameters.names
+
+    @property
     def block(self):
         return self.symbols[2]
+
+    @property
+    def stmts(self):
+        return self.block.symbols
 
     def __str__(self):
         indent = self.INDENT
@@ -336,7 +360,11 @@ def value_stmt():
         if op:
             v = value()
             if not v:
-                raise ValueError('Expected a value')
+                if _accept('OPEN_PAREN', False):
+                    v = value_stmt()
+                    _expect('CLOSE_PAREN', False)
+                else:
+                    raise ValueError('Expected a value')
             if op.symbols[0].text in '*/':
                 # Order of operations
                 last_v = symbols.pop()
