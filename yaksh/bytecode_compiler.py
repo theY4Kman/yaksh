@@ -66,6 +66,7 @@ class Instr(object):
     PROC            = 12
     MAKE_FUNCTION   = 13
     CALL_BUILTIN    = 14
+    PASS            = 15
 
     NO_PARAMS = (
         ADD,
@@ -75,6 +76,7 @@ class Instr(object):
         RETN,
         PROC,
         MAKE_FUNCTION,
+        PASS,
     )
 
     ONE_PARAM = (

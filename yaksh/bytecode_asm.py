@@ -82,6 +82,9 @@ class BytecodeAssemblyGenerator(object):
     def call_builtin(self, builtin_idx):
         self._('CALL_BUILTIN %d' % builtin_idx)
 
+    def y_pass(self):
+        self._('PASS')
+
     #############
     # Utilities #
     #############
@@ -175,12 +178,11 @@ class BytecodeAssemblyGenerator(object):
     def gen_value(self, value):
         val_sym = value.symbols[0]
         if val_sym.name == 'number':
-            number = self._get_number_const(val_sym)
-            self.load_const(number)
+            self.load_const(val_sym.value)
         elif val_sym.name == 'literal':
             self.load_const("'%s'" % val_sym.symbols[0].text)
         elif val_sym.name == 'var':
-            name = val_sym.symbols[0].text
+            name = val_sym.text
             try:
                 self.load_local(self._locals[name])
             except (KeyError, TypeError):
@@ -195,19 +197,16 @@ class BytecodeAssemblyGenerator(object):
             raise NotImplementedError()
 
     def gen_assign(self, assign):
-        value_stmt = assign.symbols[2]
-        self.gen_value_stmt(value_stmt)
-
-        name = assign.symbols[0].text
-        self._store_var(name)
+        self.gen_value_stmt(assign.value)
+        self._store_var(assign.var)
 
     def gen_reserved(self, reserved):
         if reserved.name == 'return_stmt':
-            if reserved.symbols:
-                self.gen_value_stmt(reserved.symbols[0])
+            if reserved.value:
+                self.gen_value_stmt(reserved.value)
             self.retn()
-        elif reserved.name == 'pass':
-            pass
+        elif reserved.name == 'pass_stmt':
+            self.y_pass()
         else:
             raise NotImplementedError()
 

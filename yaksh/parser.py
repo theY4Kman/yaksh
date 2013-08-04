@@ -28,16 +28,192 @@ Assumptions I've made and thought were notable while writing the grammar:
 Well, after all that planning and research, I _was_ able to jump in and write
 something that does some kind of parsing :P
 """
+import re
+
 from yaksh.lexer import OPERATORS, Token
 
 
+RGX_CAMEL_CASE = re.compile(r'([A-Z][a-z]*)')
+
+
+def _symbol_cls_name_to_symbol_name(cls_name):
+    words = [m.group(1).lower() for m in RGX_CAMEL_CASE.finditer(cls_name)]
+    return '_'.join(words)
+
+
+class _SymbolMeta(type):
+    def __new__(mcs, name, bases, attrs):
+        cls = type.__new__(mcs, name, bases, attrs)
+        if name != 'Symbol':
+            token_name = _symbol_cls_name_to_symbol_name(name)
+            Symbol._classes[token_name] = cls
+        return cls
+
+
 class Symbol(object):
+    __metaclass__ = _SymbolMeta
+
+    # Registry of specialized Symbol classes
+    _classes = {}
+
+    def __new__(cls, name, *args, **kwargs):
+        if cls.__name__ == 'Symbol' and name in Symbol._classes:
+            return Symbol._classes[name](name, *args)
+        else:
+            return object.__new__(cls, name, *args)
+
     def __init__(self, name, children):
         self.name = name
         self.symbols = children
 
     def __repr__(self):
-        return '<Symbol %s, %d children>' % (self.name, len(self.symbols))
+        return '<%s %s, %d children>' % (self.__class__.__name__, self.name,
+                                         len(self.symbols))
+
+
+class Name(Symbol):
+    @property
+    def text(self):
+        return self.symbols[0].text
+
+    def __repr__(self):
+        return '<Name %r>' % self.text
+
+    def __str__(self):
+        return self.text
+
+
+class Number(Symbol):
+    def __init__(self, name, children):
+        super(Number, self).__init__(name, children)
+        self.value = Number.decode(self.symbols[0].text)
+
+    @staticmethod
+    def decode(text):
+        if text[:2] in ('0x', '0h'):
+            return int(text, 16)
+        elif text.startswith('0b'):
+            return int(text[2:], 2)
+        elif '.' in text:
+            return float(text)
+        else:
+            return int(text)
+
+    def __repr__(self):
+        return repr(self.value)
+
+
+class Assign(Symbol):
+    @property
+    def var(self):
+        return self.symbols[0].text
+
+    @property
+    def value(self):
+        return self.symbols[2]
+
+    def __str__(self):
+        return '%s = %s' % (self.var, self.value)
+
+
+class ReturnStmt(Symbol):
+    @property
+    def value(self):
+        if self.symbols:
+            return self.symbols[0]
+
+    def __str__(self):
+        return 'return %s' % self.value
+
+
+class Operator(Symbol):
+    def __init__(self, *args, **kwargs):
+        super(Operator, self).__init__(*args, **kwargs)
+        self.text = self.symbols[0].text
+        self.opname = OPERATORS[self.text]
+
+    def __str__(self):
+        return self.text
+
+
+class Value(Symbol):
+    def __init__(self, *args, **kwargs):
+        super(Value, self).__init__(*args, **kwargs)
+
+    def __str__(self):
+        return str(self.symbols[0])
+
+
+class ValueStmt(Symbol):
+    def __str__(self):
+        return ' '.join(str(s) for s in self.symbols)
+
+
+class Literal(Symbol):
+    def __init__(self, *args, **kwargs):
+        super(Literal, self).__init__(*args, **kwargs)
+        self.text = self.symbols[0].text
+
+    def __str__(self):
+        return repr(self.text)
+
+
+class Fcall(Symbol):
+    @property
+    def func_name(self):
+        return self.symbols[0].text
+
+    @property
+    def arglist(self):
+        return self.symbols[1]
+
+    def __str__(self):
+        return '%s(%s)' % (self.func_name, self.arglist)
+
+
+class Arglist(Symbol):
+    def __str__(self):
+        return ', '.join(str(s) for s in self.symbols)
+
+
+class Var(Symbol):
+    @property
+    def text(self):
+        return self.symbols[0].text
+
+    def __str__(self):
+        return self.text
+
+
+class Parameters(Symbol):
+    def __str__(self):
+        return ', '.join(s.text for s in self.symbols)
+
+
+class Fdef(Symbol):
+    INDENT = '    '
+
+    @property
+    def func_name(self):
+        return self.symbols[0].text
+
+    @property
+    def parameters(self):
+        return self.symbols[1]
+
+    @property
+    def block(self):
+        return self.symbols[2]
+
+    def __str__(self):
+        indent = self.INDENT
+        block = indent + '    \n'.join(str(s) for s in self.block.symbols)
+        return 'def %s(%s):\n%s' % (self.func_name, self.parameters, block)
+
+
+class PassStmt(Symbol):
+    def __str__(self):
+        return 'pass'
 
 
 LITERAL_TOKENS = (
@@ -123,15 +299,18 @@ def operator():
 
 
 def value():
-    if _accept('NAME'):
+    _name = name()
+    if _name:
         if _accept('OPEN_PAREN', False):
             fcall = _endsym('fcall')
+            fcall.symbols.insert(0, _name)
             args = arglist()
             _term('CLOSE_PAREN')
             fcall.symbols.append(args)
             return Symbol('value', (fcall,))
         else:
             var = _endsym('var')
+            var.symbols.append(_name)
             return _sym('value', (var,))
     else:
         if _accept('NUMBER'):
@@ -192,15 +371,25 @@ def reserved_stmt():
             r.symbols = (return_value,)
         return r
 
+    elif _accept('R_IF'):
+        i = _endsym('if_stmt')
+        cond = value_stmt()
+        if not cond:
+            raise ValueError('Expected a condition')
+        _expect('BLOCK_BEGIN', False)
+        # TODO: accept elifs and elses
+
     elif _accept('R_PASS'):
         return _endsym('pass_stmt')
 
 
 def stmt():
     _eat_newlines()
-    if _accept('NAME'):
+    _name = name()
+    if _name:
         if _accept('ASSIGN'):
             assign = _endsym('assign')
+            assign.symbols.insert(0, _name)
             value = value_stmt()
             if not value:
                 raise ValueError('Expected a value statement')
@@ -214,12 +403,15 @@ def stmt():
             return assign
         elif _accept('OPEN_PAREN', False):
             fcall = _endsym('fcall')
+            fcall.symbols.append(_name)
             args = arglist()
             _term('CLOSE_PAREN')
             fcall.symbols.append(args)
             return fcall
         elif _accept('NEWLINE'):
-            return _endsym('var')
+            var = _endsym('var')
+            var.symbols.append(_name)
+            return var
         else:
             raise ValueError('Not a valid statement')
     else:
@@ -281,10 +473,14 @@ def parse(tokens):
 
             _term('OPEN_PAREN')
 
-            while _accept('NAME'):
+            parameters = _endsym('parameters')
+            while True:
+                _name = name()
+                if not _name:
+                    break
+                parameters.symbols.append(_name)
                 if not _accept('COMMA', False):
                     break
-            parameters = _endsym('parameters')
 
             _term('CLOSE_PAREN')
             _term('BLOCK_BEGIN')
@@ -307,7 +503,10 @@ def parse(tokens):
 def tuplify_symbols(symbols):
     def _symbol_to_list(symbol):
         if isinstance(symbol, Symbol):
-            return symbol.name, tuplify_symbols(symbol.symbols)
+            if symbol.__class__ == Symbol:
+                return symbol.name, tuplify_symbols(symbol.symbols)
+            else:
+                return symbol
         else:
             return symbol
     tuplified = []

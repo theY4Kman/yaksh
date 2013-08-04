@@ -86,8 +86,8 @@ def lex(s):
     def _type_is(type):
         return curtype and curtype[0] == type
 
-    def _last_token_is(type, c=None):
-        return tokens and tokens[-1].type == type and (c is None or c == tokens[-1].text)
+    def _last_token_is(type, c=None, offs=-1):
+        return tokens and tokens[offs].type == type and (c is None or c == tokens[-1].text)
 
     def _suppress():
         curtype[:] = []
@@ -198,7 +198,11 @@ def lex(s):
             line_no += 1
             char_no = -1
         elif c in ' \t':
-            if _last_token_is('NEWLINE') or _type_is('INDENT'):
+            valid_indent_location = (_last_token_is('NEWLINE') and (
+                _last_token_is('INDENT', offs=-2) or
+                _last_token_is('BLOCK_BEGIN', offs=-2))
+            )
+            if valid_indent_location or _type_is('INDENT'):
                 _token('INDENT')
             else:
                 _end_token()

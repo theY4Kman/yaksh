@@ -8,6 +8,8 @@ from yaksh.vm import AbstractMachine
 TEST_PROGRAM = '''
 def test(a, b, c):
     return a + b * c
+def pass_text():
+    pass
 t = test(1, 2, 3)
 print(t)
 f = test(1, 2, 3) + test(4, 5, 6)
@@ -31,7 +33,7 @@ def _get_symbols(source):
     tree = parse(tokens)
     print '### Parse tree'
 
-    pprint(tuplify_symbols(tree))
+    print '\n'.join(str(s) for s in tree)
     print
 
     return tree
@@ -67,8 +69,9 @@ def bytecode_example():
 if __name__ == '__main__':
     from pprint import pprint
 
-    interpreter_example()
-    print
-    print '############### END INTERPRETER EXAMPLE ###############'
-    print
+    # symbols = _get_symbols(TEST_PROGRAM)
+    # interpreter_example()
+    # print
+    # print '############### END INTERPRETER EXAMPLE ###############'
+    # print
     bytecode_example()
