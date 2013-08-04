@@ -285,6 +285,8 @@ class ElifStmt(_BaseCondTestStmt):
 
 
 class ElseStmt(_BaseTestStmt):
+    cond = None
+
     @property
     def block(self):
         return self.symbols[1]

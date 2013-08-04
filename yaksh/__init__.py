@@ -79,14 +79,7 @@ if __name__ == '__main__':
     # print '############### END INTERPRETER EXAMPLE ###############'
     # print
     bytecode_example('''
-a = 24
-if 1 - 1:
-    print('hello!')
-elif 1 + 1 - 2:
-    print('Oh, shit yayer')
-elif a:
-    print('aaaaaa')
-else:
-    print('wat?')
-pass
+def do_arith(a, b, c):
+    return a + b + c
+print(do_arith(1, 2, 3))
 ''')

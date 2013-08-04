@@ -1,5 +1,5 @@
-from collections import OrderedDict
 import struct
+
 from yaksh.bytecode_asm import BUILTINS
 from yaksh.bytecode_compiler import MAGIC, Const, Instr
 
@@ -81,12 +81,14 @@ class VirtualMachine(_VirtualMachinePartial):
         except IndexError:
             raise RuntimeError('Function %d does not exist.' % idx)
 
+        old_ip = self._ip
         self._ctx_stack.append({})
         try:
             self.execute(func_instr)
         except Return:
             pass
         self._ctx_stack.pop()
+        self._ip = old_ip
 
     def store_var(self, local_idx):
         try:

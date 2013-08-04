@@ -8,6 +8,8 @@ try:
 except ImportError:
     from StringIO import StringIO
 
+from yaksh.parser import Symbol
+
 
 RESERVED_STMTS = {'return_stmt', 'pass_stmt', 'if_chain'}
 BUILTINS = (
@@ -261,15 +263,18 @@ class BytecodeAssemblyGenerator(object):
         """
         with self._local_labels():
             label_idx = 0
-            for test_stmt in if_chain.test_stmts:
-                self.gen_value_stmt(test_stmt.cond)
-                next_label = self._get_next_label('chain_next%d' % label_idx)
-                label_idx += 1
-                self.jz(next_label)
+            last_test = len(if_chain.symbols) - 1
+            for i, test_stmt in enumerate(if_chain.symbols):
+                if test_stmt.cond and i != last_test:
+                    self.gen_value_stmt(test_stmt.cond)
+                    next_label = self._get_next_label('chain_next%d' % label_idx)
+                    label_idx += 1
+                    self.jz(next_label)
                 for stmt in test_stmt.block.symbols:
                     self.gen_stmt(stmt)
-                self.jmp('chain_end')
-                self._label_next(next_label)
+                if test_stmt.cond and i != last_test:
+                    self.jmp('chain_end')
+                    self._label_next(next_label)
 
             if if_chain.else_stmt:
                 for stmt in if_chain.else_stmt.block.symbols:
@@ -336,6 +341,8 @@ class BytecodeAssemblyGenerator(object):
                 self.gen_fdef(symbol)
             else:
                 self.gen_stmt(symbol)
+        if self._label:
+            self.gen_stmt(Symbol('pass_stmt', ()))
         funcs = '\n'.join(self._funcs)
         return '\n'.join((funcs, self._bc.getvalue()))
 
