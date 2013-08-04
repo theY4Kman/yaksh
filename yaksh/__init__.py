@@ -86,13 +86,8 @@ if __name__ == '__main__':
     # print
     # print '############### END INTERPRETER EXAMPLE ###############'
     # print
-    cmps = (
-        '1 == 1',
-        '1 != 1', '1 != 2',
-        '1 >= 1', '1 >= 2', '1 >= 3',
-        '1 <= 2',
-        '1 < 2',
-        '1 > 2',
-    )
-    instrs = ('print(%r)\nprint(%s)\nprint("")' % (s, s) for s in cmps)
-    bytecode_example('\n'.join(instrs))
+    bytecode_example('''
+def test(a, b, c):
+    print(a + b + c)
+test(1, 2, 3)
+''')
