@@ -345,7 +345,7 @@ def value():
             return _sym('value', (literal,))
 
 
-def value_stmt():
+def value_stmt(allow_empty=False):
     symbols = []
     v = value()
     if not v:
@@ -353,7 +353,7 @@ def value_stmt():
             v = value_stmt()
             _expect('CLOSE_PAREN', False)
         else:
-            raise ValueError('Expected a value')
+            return
     symbols.append(v)
     while True:
         op = operator()
