@@ -26,7 +26,13 @@ class BytecodeAssemblyGenerator(object):
         self._funcs = []
         self._func_names = {}
 
+        self._label = None
+        self._label_counters = [0]
+
     def _(self, asm):
+        if self._label:
+            self._bc.write(self._label + ': ')
+            self._label = None
         self._bc.write(asm)
         self._bc.write('\n')
 
@@ -81,6 +87,12 @@ class BytecodeAssemblyGenerator(object):
     def jz(self, label):
         self._('JZ %s' % label)
 
+    def jnz(self, label):
+        self._('JNZ %s' % label)
+
+    def jmp(self, label):
+        self._('JMP %s' % label)
+
     #############
     # Utilities #
     #############
@@ -134,6 +146,26 @@ class BytecodeAssemblyGenerator(object):
         self._funcs.append(self._bc.getvalue())
 
         self._bc = bytecode
+
+    @contextmanager
+    def _local_labels(self):
+        self._label_counters.append(0)
+        yield
+        self._label_counters.pop()
+
+    def _get_next_label(self, rel_label):
+        # This is not very robust, because a label name like "0_test" would end
+        # up jumping to a lower-level test. However, since I'm controlling the
+        # output of assembly generator, and thus the name of the labels, I can
+        # make the assertion.
+        assert not rel_label[0].isdigit()
+        depth_unique = '_'.join(str(c) for c in self._label_counters)
+        actual_label = '_%s_%s' % (depth_unique, rel_label)
+        return actual_label
+
+    def _label_next(self, label):
+        self._label = label
+        self._label_counters[-1] += 1
 
     #################################
     # SYMBOL TRANSFORMATION METHODS #
@@ -196,7 +228,8 @@ class BytecodeAssemblyGenerator(object):
         self._store_var(assign.var)
 
     def gen_if_chain(self, if_chain):
-        '''
+        """
+        # @type if_chain:   IfChain
         TODO: evaluate if condition, leaving result at top of stack
         TODO: gotta mark instruction at end of if block, and jump to it if the
               top of the stack is zero.
@@ -224,12 +257,22 @@ class BytecodeAssemblyGenerator(object):
                             else:
             chain_next2:        pass            PASS
 
-        '''
-        with self._local_label():
+        """
+        with self._local_labels():
             label_idx = 0
             for test_stmt in if_chain.test_stmts:
                 self.gen_value_stmt(test_stmt.cond)
-                self.jz('chain_next%d' % label_idx)
+                next_label = self._get_next_label('chain_next%d' % label_idx)
+                self.jz(next_label)
+                for stmt in test_stmt.block.symbols:
+                    self.gen_stmt(stmt)
+                self.jmp('chain_end')
+                self._label_next(next_label)
+
+            if if_chain.else_stmt:
+                for stmt in if_chain.else_stmt.block.symbols:
+                    self.gen_stmt(stmt)
+            self._label_next('chain_end')
 
     def gen_reserved(self, reserved):
         if reserved.name == 'return_stmt':

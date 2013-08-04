@@ -24,6 +24,7 @@ print((4 - 4) / 2)
 
 if 1 + 1:
     print('taco')
+pass
 '''
 
 
@@ -50,8 +51,8 @@ def interpreter_example():
     interp.run()
 
 
-def bytecode_example():
-    symbols = _get_symbols(TEST_PROGRAM)
+def bytecode_example(program=TEST_PROGRAM):
+    symbols = _get_symbols(program)
 
     print "### Bytecode Assembly"
     bc_gen = BytecodeAssemblyGenerator(symbols)
@@ -77,4 +78,12 @@ if __name__ == '__main__':
     # print
     # print '############### END INTERPRETER EXAMPLE ###############'
     # print
-    bytecode_example()
+    bytecode_example('''
+if 1 - 1:
+    print('hello!')
+elif 1 + 1:
+    print('Oh, shit yayer')
+else:
+    print('wat?')
+pass
+''')

@@ -31,9 +31,17 @@ Extra notes:
    bytecode, the parameter is replaced with an index into the constants table.
 """
 import struct
+from collections import defaultdict
+from os import SEEK_SET, SEEK_END
+
+try:
+    from cStringIO import StringIO
+except ImportError:
+    from StringIO import StringIO
 
 
 MAGIC = '\x42YAK'
+PYTHON_RESERVED = ('pass',)
 
 
 class _InstrMeta(type):
@@ -44,7 +52,10 @@ class _InstrMeta(type):
         names = {}
         for name, value in attrs.iteritems():
             if isinstance(value, int):
-                names[value] = name.lower()
+                name = name.lower()
+                if name in PYTHON_RESERVED:
+                    name = 'y_' + name
+                names[value] = name
         cls._names = names
         return cls
 
@@ -67,6 +78,9 @@ class Instr(object):
     MAKE_FUNCTION   = 13
     CALL_BUILTIN    = 14
     PASS            = 15
+    JZ              = 16
+    JNZ             = 17
+    JMP             = 18
 
     NO_PARAMS = (
         ADD,
@@ -79,6 +93,12 @@ class Instr(object):
         PASS,
     )
 
+    JUMPS = (
+        JZ,
+        JNZ,
+        JMP,
+    )
+
     ONE_PARAM = (
         CALL,
         STORE_VAR,
@@ -87,7 +107,7 @@ class Instr(object):
         LOAD_GLOBAL,
         LOAD_LOCAL,
         CALL_BUILTIN,
-    )
+    ) + JUMPS
 
 
 class Const(object):
@@ -116,11 +136,33 @@ def assemble(asm):
     # Note: this assumes function definitions are already at the top of the
     #       assembly. This is unnecessary, but makes the assembler simpler.
 
-    pieces = []
+    out = StringIO()
     # List of packed constants
     consts = []
     # Hash table of packed constants, to remove unnecessary duplication
     consts_table = {}
+    # Map of labels to `out` indices
+    labels = [{}]
+    # Label locations in `out` to replace with pointers
+    label_rplc = [defaultdict(list)]
+
+    def _replace_labels():
+        for label, rpl_locs in label_rplc[-1].iteritems():
+            if label not in labels[-1]:
+                raise ValueError("Unknown label '%s'" % label)
+            for loc in rpl_locs:
+                local_offs = labels[-1][label]
+                out.seek(loc, SEEK_SET)
+                out.write(struct.pack('H', local_offs))
+                out.seek(0, SEEK_END)
+
+    def _pop_labels():
+        labels.pop()
+        label_rplc.pop()
+
+    def _push_labels():
+        labels.append({})
+        label_rplc.append(defaultdict(list))
 
     for line in asm.split('\n'):
         line = line.strip()
@@ -128,6 +170,20 @@ def assemble(asm):
             continue
 
         s_instr, _, arg = line.partition(' ')
+        if s_instr.endswith(':'):
+            if not s_instr[0].isalpha():
+                if len(s_instr) == 1:
+                    raise ValueError('Empty label')
+                elif not s_instr[0] == '_':
+                    raise ValueError("Invalid label name '%s'" % s_instr[:-1])
+            label_name = s_instr[:-1]
+            if label_name in labels:
+                raise ValueError("Label '%s' already exists" % label_name)
+            labels[-1][label_name] = out.tell()
+
+            # Redo the partition on the rest of the line
+            s_instr, _, arg = arg.lstrip().partition(' ')
+
         s_instr = s_instr.upper()
         instr = getattr(Instr, s_instr, None)
         if instr is None:
@@ -139,11 +195,15 @@ def assemble(asm):
         elif instr in Instr.ONE_PARAM and not arg:
             raise ValueError("Instruction '%s' takes one parameter" % s_instr)
 
-        pieces.append(struct.pack('B', instr))
+        out.write(struct.pack('B', instr))
         if instr in Instr.NO_PARAMS:
+            if instr == Instr.MAKE_FUNCTION:
+                _replace_labels()
+                _pop_labels()
+            elif instr == Instr.PROC:
+                _push_labels()
             continue
-
-        if instr == Instr.LOAD_CONST:
+        elif instr == Instr.LOAD_CONST:
             if arg[0] in ('"', "'"):
                 if len(arg) == 1 or arg[-1] != arg[0]:
                     raise ValueError('Malformed string constant: %s' % arg)
@@ -167,16 +227,22 @@ def assemble(asm):
                 consts.append(packed)
                 consts_table[packed] = idx
             param = idx
+        elif instr in Instr.JUMPS:
+            label_rplc[-1][arg].append(out.tell())
+            out.write(struct.pack('H', 0))
+            continue
         else:
             try:
                 param = int(arg)
             except ValueError:
                 raise ValueError('Malformed parameter: %s' % arg)
 
-        pieces.append(struct.pack('B', param))
+        out.write(struct.pack('B', param))
+
+    _replace_labels()
 
     p_consts = ''.join(consts)
     p_const_size = struct.pack('I', len(p_consts))
-    p_pieces = ''.join(pieces)
+    p_pieces = out.getvalue()
 
     return ''.join((MAGIC, p_const_size, p_consts, p_pieces))

@@ -1,3 +1,4 @@
+from collections import OrderedDict
 import struct
 from yaksh.bytecode_asm import BUILTINS
 from yaksh.bytecode_compiler import MAGIC, Const, Instr
@@ -9,7 +10,10 @@ class Return(Exception):
 
 class _VirtualMachinePartial(object):
     def _pop(self):
-        return self._stack.pop()
+        try:
+            return self._stack.pop()
+        except IndexError:
+            raise RuntimeError('Popped an empty stack.')
 
     def _push(self, v):
         self._stack.append(v)
@@ -125,10 +129,26 @@ class VirtualMachine(_VirtualMachinePartial):
     def call_builtin(self, builtin_idx):
         self._builtins.call(builtin_idx)
 
+    def y_pass(self):
+        pass
+
+    def jz(self, local_ptr):
+        if self._pop() == 0:
+            # The -1 to counteract the += 1 in execute loop
+            self._ip = local_ptr - 1
+
+    def jnz(self, local_ptr):
+        if self._pop() != 0:
+            # The -1 to counteract the += 1 in execute loop
+            self._ip = local_ptr - 1
+
     def execute(self, instructions):
-        for instr, arg in instructions:
+        self._ip = 0
+        while self._ip < len(instructions):
+            instr, arg = instructions[self._ip]
             try:
-                f = getattr(self, Instr._names[instr])
+                instr_name = Instr._names[instr]
+                f = getattr(self, instr_name)
             except KeyError:
                 raise RuntimeError('Unknown instruction type %d' % instr)
             except AttributeError:
@@ -138,6 +158,8 @@ class VirtualMachine(_VirtualMachinePartial):
                 f()
             else:
                 f(arg)
+
+            self._ip += 1
 
 
 class AbstractMachine(object):
@@ -185,6 +207,10 @@ class AbstractMachine(object):
             return struct.unpack('B', byte)[0]
     _byte = _instr
 
+    def _short(self):
+        short = self._read(2)
+        return struct.unpack('H', short)[0]
+
     def _decode_consts(self):
         table_size, = struct.unpack('I', self._read(4))
         if table_size == 0:
@@ -221,20 +247,35 @@ class AbstractMachine(object):
             self._funcs.append(func_instr)
 
     def _decode(self, until=None):
+            offs_rps = {}
+            repl_offs = []
             instructions = []
             while True:
+                offs_rps[self._rp] = len(instructions)
                 instr = self._instr()
                 if instr == until:
-                    return instructions
+                    break
 
-                if instr in Instr.ONE_PARAM:
-                    instructions.append((instr, self._byte()))
+                if instr in Instr.JUMPS:
+                    repl_offs.append(len(instructions))
+                    pack = (instr, self._first_instr + self._short())
+                elif instr in Instr.ONE_PARAM:
+                    pack = (instr, self._byte())
                 else:
-                    instructions.append((instr, None))
+                    pack = (instr, None)
+                instructions.append(pack)
             else:
                 if until is not None:
                     raise ValueError('Unexpected end of code')
-                return instructions
+
+            for i in repl_offs:
+                instr, rp = instructions[i]
+                try:
+                    instructions[i] = (instr, offs_rps[rp])
+                except IndexError:
+                    raise ValueError('Invalid jump')
+
+            return instructions
 
     def run(self):
         vm = VirtualMachine(self)

@@ -239,6 +239,7 @@ class PassStmt(Symbol):
 class IfChain(Symbol):
     def __init__(self, *args, **kwargs):
         super(IfChain, self).__init__(*args, **kwargs)
+        #: @type: list of _BaseTestStmt
         self.test_stmts = []
         self.else_stmt = None
         for test in self.symbols:
@@ -484,7 +485,11 @@ def reserved_stmt():
             if_piece.symbols.append(_block)
 
             if_pieces.append(if_piece)
-            if_piece = _accept('R_ELIF')
+            elif_sym = _accept('R_ELIF')
+            if elif_sym:
+                if_piece = _endsym('elif_stmt')
+            else:
+                break
 
         return _sym('if_chain', if_pieces)
 
