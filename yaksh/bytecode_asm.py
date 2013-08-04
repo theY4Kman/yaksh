@@ -9,7 +9,7 @@ except ImportError:
     from StringIO import StringIO
 
 
-RESERVED_STMTS = {'return_stmt', 'pass_stmt', 'if_stmt'}
+RESERVED_STMTS = {'return_stmt', 'pass_stmt', 'if_chain'}
 BUILTINS = (
     'print',
 )
@@ -78,6 +78,9 @@ class BytecodeAssemblyGenerator(object):
     def y_pass(self):
         self._('PASS')
 
+    def jz(self, label):
+        self._('JZ %s' % label)
+
     #############
     # Utilities #
     #############
@@ -88,7 +91,6 @@ class BytecodeAssemblyGenerator(object):
         elif s_num.startswith('0b'):
             return int(s_num[2:], 2)
         elif '.' in s_num:
-            # TODO: pack float?
             return float(s_num)
         else:
             return int(s_num)
@@ -193,6 +195,42 @@ class BytecodeAssemblyGenerator(object):
         self.gen_value_stmt(assign.value)
         self._store_var(assign.var)
 
+    def gen_if_chain(self, if_chain):
+        '''
+        TODO: evaluate if condition, leaving result at top of stack
+        TODO: gotta mark instruction at end of if block, and jump to it if the
+              top of the stack is zero.
+
+        Example pseudo-bytecode-asm:
+
+                            if a + b:           LOAD_VAR    0
+                                                LOAD_VAR    1
+                                                ADD
+                                                JZ          [chain_next0]
+                                pass            PASS
+                                                JMP         [chain_end]
+            chain_next0:    elif a - b:         LOAD_VAR    0
+                                                LOAD_VAR    1
+                                                SUB
+                                                JZ          [chain_next1]
+                                pass            PASS
+                                                JMP         [chain_end]
+            chain_next1:    elif a * b:         LOAD_VAR    0
+                                                LOAD_VAR    1
+                                                MULT
+                                                JZ          [chain_next2]
+                                pass            PASS
+                                                JMP         [chain_end]
+                            else:
+            chain_next2:        pass            PASS
+
+        '''
+        with self._local_label():
+            label_idx = 0
+            for test_stmt in if_chain.test_stmts:
+                self.gen_value_stmt(test_stmt.cond)
+                self.jz('chain_next%d' % label_idx)
+
     def gen_reserved(self, reserved):
         if reserved.name == 'return_stmt':
             if reserved.value:
@@ -200,6 +238,8 @@ class BytecodeAssemblyGenerator(object):
             self.retn()
         elif reserved.name == 'pass_stmt':
             self.y_pass()
+        elif reserved.name == 'if_chain':
+            self.gen_if_chain(reserved)
         else:
             raise NotImplementedError()
 

@@ -164,6 +164,8 @@ def lex(s):
                     _single('UNKNOWN')
             else:
                 _single('ASSIGN')
+        elif c in '><':
+            _single('GT' if c == '>' else 'LT')
         elif c in ('"', "'"):
             # If there's an empty string, _token won't be called to set the
             # token type

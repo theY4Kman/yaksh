@@ -61,3 +61,16 @@ print(do_arith(1, 2, 3))''', '6')
 def test_functions(source, expected):
     output = vm_output(source).strip()
     assert output == expected, _expected_actual(expected, output, source)
+
+
+@pytest.mark.parametrize(
+    ('source', 'expected'),
+    (
+        ('''
+if 1:
+    print("1")''', '1'),
+    )
+)
+def test_if_chain(source, expected):
+    output = vm_output(source).strip()
+    assert output == expected, _expected_actual(expected, output, source)

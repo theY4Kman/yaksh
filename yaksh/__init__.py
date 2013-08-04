@@ -21,6 +21,9 @@ print(8 / 2)
 print(4 - 8 / 2)
 print(4 - 4 / 2)
 print((4 - 4) / 2)
+
+if 1 + 1:
+    print('taco')
 '''
 
 

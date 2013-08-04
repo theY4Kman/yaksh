@@ -44,7 +44,7 @@ def _symbol_cls_name_to_symbol_name(cls_name):
 class _SymbolMeta(type):
     def __new__(mcs, name, bases, attrs):
         cls = type.__new__(mcs, name, bases, attrs)
-        if name != 'Symbol':
+        if name != 'Symbol' and not name.startswith('_'):
             token_name = _symbol_cls_name_to_symbol_name(name)
             Symbol._classes[token_name] = cls
         return cls
@@ -207,8 +207,6 @@ class Parameters(Symbol):
 
 
 class Fdef(Symbol):
-    INDENT = '    '
-
     @property
     def func_name(self):
         return self.symbols[0].text
@@ -230,14 +228,69 @@ class Fdef(Symbol):
         return self.block.symbols
 
     def __str__(self):
-        indent = self.INDENT
-        block = indent + '    \n'.join(str(s) for s in self.block.symbols)
-        return 'def %s(%s):\n%s' % (self.func_name, self.parameters, block)
+        return 'def %s(%s):\n%s' % (self.func_name, self.parameters, self.block)
 
 
 class PassStmt(Symbol):
     def __str__(self):
         return 'pass'
+
+
+class IfChain(Symbol):
+    def __init__(self, *args, **kwargs):
+        super(IfChain, self).__init__(*args, **kwargs)
+        self.test_stmts = []
+        self.else_stmt = None
+        for test in self.symbols:
+            if self.else_stmt:
+                raise SyntaxError('Unexpected %s statement' % test.name)
+            if test.name == 'else_stmt':
+                self.else_stmt = test
+            else:
+                self.test_stmts.append(test)
+
+    def __str__(self):
+        pieces = [str(t) for t in self.test_stmts]
+        if self.else_stmt:
+            pieces.append(str(self.else_stmt))
+        return '\n'.join(pieces)
+
+
+class _BaseTestStmt(Symbol):
+    def __init__(self, *args, **kwargs):
+        super(_BaseTestStmt, self).__init__(*args, **kwargs)
+        self.text = self.symbols[0].text
+
+    @property
+    def cond(self):
+        return self.symbols[1]
+
+    @property
+    def block(self):
+        return self.symbols[2]
+
+    def __str__(self):
+        return '%s %s:\n%s' % (self.text, self.cond, self.block)
+
+
+class IfStmt(_BaseTestStmt):
+    pass
+
+
+class ElifStmt(_BaseTestStmt):
+    pass
+
+
+class ElseStmt(_BaseTestStmt):
+    pass
+
+
+class Block(Symbol):
+    INDENT = '    '
+
+    def __str__(self):
+        return (self.INDENT +
+                (self.INDENT + '    \n').join(str(s) for s in self.symbols))
 
 
 LITERAL_TOKENS = (
@@ -272,8 +325,10 @@ def _getsym():
     _next()
 
 
-def _accept(token_type, capture=True):
-    if cur.type == token_type:
+def _accept(token_types, capture=True):
+    if not isinstance(token_types, tuple):
+        token_types = (token_types,)
+    if cur and cur.type in token_types:
         if capture:
             _getsym()
         else:
@@ -345,26 +400,33 @@ def value():
             return _sym('value', (literal,))
 
 
-def value_stmt(allow_empty=False):
-    symbols = []
+def cmp_operator():
+   return _accept(('NOTEQUAL', 'ISEQUAL', 'GT', 'LT', 'GTE', 'LTE'))
+
+
+def _expect_value(allow_empty=False):
     v = value()
     if not v:
         if _accept('OPEN_PAREN', False):
             v = value_stmt()
             _expect('CLOSE_PAREN', False)
-        else:
+        elif allow_empty:
             return
+        else:
+            raise ValueError('Expected a value')
+    return v
+
+
+def value_stmt():
+    symbols = []
+    v = _expect_value(True)
+    if not v:
+        return
     symbols.append(v)
     while True:
         op = operator()
         if op:
-            v = value()
-            if not v:
-                if _accept('OPEN_PAREN', False):
-                    v = value_stmt()
-                    _expect('CLOSE_PAREN', False)
-                else:
-                    raise ValueError('Expected a value')
+            v = _expect_value()
             if op.symbols[0].text in '*/':
                 # Order of operations
                 last_v = symbols.pop()
@@ -374,7 +436,14 @@ def value_stmt(allow_empty=False):
                 symbols.append(op)
                 symbols.append(v)
         else:
-            break
+            cmp = cmp_operator()
+            if cmp:
+                v = _expect_value()
+                cmp_stmt = _sym('cmp_stmt', (symbols.pop(), cmp, v))
+                symbols.append(cmp_stmt)
+            else:
+                break
+
     return Symbol('value_stmt', symbols)
 
 
@@ -400,12 +469,25 @@ def reserved_stmt():
         return r
 
     elif _accept('R_IF'):
-        i = _endsym('if_stmt')
-        cond = value_stmt()
-        if not cond:
-            raise ValueError('Expected a condition')
-        _expect('BLOCK_BEGIN', False)
-        # TODO: accept elifs and elses
+        if_pieces = []
+        if_piece = _endsym('if_stmt')
+        while if_piece:
+            cond = value_stmt()
+            if not cond:
+                raise ValueError('Expected a condition')
+            if_piece.symbols.append(cond)
+
+            _expect('BLOCK_BEGIN', False)
+            _block = block()
+            if not _block:
+                raise ValueError('Expected a block')
+            if_piece.symbols.append(_block)
+
+            if_pieces.append(if_piece)
+            if_piece = _accept('R_ELIF')
+
+        return _sym('if_chain', if_pieces)
+
 
     elif _accept('R_PASS'):
         return _endsym('pass_stmt')
