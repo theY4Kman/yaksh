@@ -79,7 +79,7 @@ if __name__ == '__main__':
     # print '############### END INTERPRETER EXAMPLE ###############'
     # print
     bytecode_example('''
-def do_arith(a, b, c):
+def test(a, b, c):
     return a + b + c
-print(do_arith(1, 2, 3))
+print(test(1, 2, 3))
 ''')

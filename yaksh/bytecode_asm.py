@@ -265,22 +265,21 @@ class BytecodeAssemblyGenerator(object):
             label_idx = 0
             last_test = len(if_chain.symbols) - 1
             for i, test_stmt in enumerate(if_chain.symbols):
-                if test_stmt.cond and i != last_test:
+                if test_stmt.cond:
                     self.gen_value_stmt(test_stmt.cond)
-                    next_label = self._get_next_label('chain_next%d' % label_idx)
-                    label_idx += 1
+                    if i != last_test:
+                        next_label = self._get_next_label('chain_next%d' % label_idx)
+                        label_idx += 1
+                    else:
+                        next_label = 'chain_out'
                     self.jz(next_label)
                 for stmt in test_stmt.block.symbols:
                     self.gen_stmt(stmt)
                 if test_stmt.cond and i != last_test:
-                    self.jmp('chain_end')
+                    self.jmp('chain_out')
                     self._label_next(next_label)
 
-            if if_chain.else_stmt:
-                for stmt in if_chain.else_stmt.block.symbols:
-                    self.gen_stmt(stmt)
-
-            self._label_next('chain_end')
+            self._label_next('chain_out')
 
     def gen_reserved(self, reserved):
         if reserved.name == 'return_stmt':

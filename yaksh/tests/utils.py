@@ -23,6 +23,7 @@ def capture_stdout():
 def vm_output(s):
     tokens = lex(s)
     symbols = parse(tokens)
+    # print '\n'.join(map(str, symbols))###########################
     bc_gen = BytecodeAssemblyGenerator(symbols)
     bc_asm = bc_gen.generate()
     bytecode = assemble(bc_asm)

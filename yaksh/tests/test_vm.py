@@ -68,7 +68,31 @@ def test_functions(source, expected):
     (
         ('''
 if 1:
-    print("1")''', '1'),
+    print(1)''', '1'),
+        ('''
+if 1:
+    print(1)
+print(2)''', '1\n2'),
+        ('''
+if 0:
+    print(0)
+else:
+    print(1)''', '1'),
+        ('''
+if 0:
+    print(0)
+else:
+    print(1)
+print(2)''', '1\n2'),
+        ('''
+if 0:
+    print(0)
+elif 1 - 1:
+    print(1)
+elif 1 + 1:
+    print(2)
+else:
+    print(3)''', '2')
     )
 )
 def test_if_chain(source, expected):
